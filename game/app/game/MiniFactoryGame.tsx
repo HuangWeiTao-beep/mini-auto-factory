@@ -33,6 +33,7 @@ export function MiniFactoryGame() {
   const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign()));
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const [toast, setToast] = useState("把四台设备拖进画布，按工序顺序连起来。");
   const floorRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -163,6 +164,8 @@ export function MiniFactoryGame() {
   );
 
   const allMachinesPlaced = Object.keys(design.devices).length === palette.length;
+  const closeOnboarding = () => setShowOnboarding(false);
+  const openOnboarding = () => setShowOnboarding(true);
 
   return (
     <main className="factory-app">
@@ -178,6 +181,9 @@ export function MiniFactoryGame() {
         <div className="header-status">
           <span className={`status-light status-light--${state.mode}`} />
           <div><small>系统状态</small><b>{state.mode === "running" ? "生产中" : state.mode === "paused" ? "已暂停" : "设计模式"}</b></div>
+          <button className="help-control" type="button" aria-label="打开玩法说明" onClick={openOnboarding}>
+            <span aria-hidden="true">?</span>玩法
+          </button>
         </div>
       </header>
 
@@ -249,6 +255,24 @@ export function MiniFactoryGame() {
         </div>
         <div className="legend"><span><i className="legend-working" />加工中</span><span><i className="legend-wait" />等待</span><span><i className="legend-error" />错误</span></div>
       </footer>
+
+      {showOnboarding && (
+        <div className="onboarding-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+          <section className="onboarding-card">
+            <button className="onboarding-close" type="button" aria-label="关闭玩法说明" onClick={closeOnboarding}>×</button>
+            <span className="onboarding-kicker">START HERE</span>
+            <h2 id="onboarding-title">第 1 关怎么玩</h2>
+            <p>把设备摆好、接好工序，再启动这条小小的螺栓产线。</p>
+            <ol className="onboarding-steps">
+              <li>从左侧设备栏拖入四台设备。</li>
+              <li>从输出端口拖到下一台设备的输入端口。</li>
+              <li className="onboarding-route">钢棒源 <span>→</span> 切割机 <span>→</span> 车削机 <span>→</span> 成品出口</li>
+              <li>点击「开始生产」，在 60 秒内完成 10 个螺栓。</li>
+            </ol>
+            <button className="onboarding-primary" type="button" onClick={closeOnboarding}>我明白了，开始设计</button>
+          </section>
+        </div>
+      )}
 
       {(state.mode === "success" || state.mode === "failure") && (
         <div className="settlement-backdrop" role="dialog" aria-modal="true" aria-labelledby="settlement-title">

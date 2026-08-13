@@ -20,5 +20,10 @@ test("server-renders the mini factory game shell", async () => {
   assert.match(html, /第 1 关：螺栓生产/);
   assert.match(html, /60 秒内生产/);
   assert.match(html, /10<\/b> 个合格螺栓/);
+  assert.match(html, /第 1 关怎么玩/);
+  assert.match(html, /钢棒源.*切割机.*车削机.*成品出口/);
+  assert.match(html, /60 秒内完成 10 个螺栓/);
+  assert.match(html, /aria-label="关闭玩法说明"/);
+  assert.match(html, /aria-label="打开玩法说明"/);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/);
 });

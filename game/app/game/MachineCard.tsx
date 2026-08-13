@@ -12,7 +12,7 @@ type Props = {
   onDragStart: (event: DragEvent<HTMLElement>, id: string) => void;
 };
 
-const icons = { source: "▰", cutter: "✂", lathe: "⚙", exit: "✓" } as const;
+const icons = { source: "▰", cutter: "✂", lathe: "⚙", drill: "◉", exit: "✓" } as const;
 
 function materialLabel(kind: MaterialType | null | undefined) {
   return kind ? MATERIALS[kind].shortLabel : "空";
@@ -30,7 +30,8 @@ export function MachineCard({
   const spec = DEVICE_TYPES[device.type];
   const machine = state.machines[device.id];
   const isSource = device.type === "source";
-  const status = machine?.status ?? (isSource && state.source.pulse > 0 ? "working" : "idle");
+  const source = isSource ? state.sources[device.id] : undefined;
+  const status = machine?.status ?? ((source?.pulse ?? 0) > 0 ? "working" : "idle");
   const hasInput = device.type !== "source";
   const hasOutput = device.type !== "exit";
   const progress = machine?.active
@@ -71,6 +72,7 @@ export function MachineCard({
           {device.type === "source" && "3.0 秒 / 根"}
           {device.type === "cutter" && "长钢棒 → 短料 · 2.0 秒"}
           {device.type === "lathe" && "短料 → 螺栓 · 3.0 秒"}
+          {device.type === "drill" && "未钻孔螺栓 → 螺栓 · 2.0 秒"}
           {device.type === "exit" && "合格品计数"}
         </small>
       </div>

@@ -30,7 +30,7 @@ const starterDesign = () => createEmptyDesign();
 
 export function MiniFactoryGame() {
   const [design, setDesign] = useState<FactoryDesign>(starterDesign);
-  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign()));
+  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign(), LEVEL_CONFIG));
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
@@ -52,7 +52,7 @@ export function MiniFactoryGame() {
     setDesign((current) => {
       const next = mutation(current);
       if (next !== current && state.mode !== "paused") {
-        setState(createProductionState(next));
+        setState(createProductionState(next, LEVEL_CONFIG));
       }
       return next;
     });
@@ -81,7 +81,7 @@ export function MiniFactoryGame() {
       const previous = previousTime.current ?? time;
       previousTime.current = time;
       const delta = Math.min(0.1, (time - previous) / 1000);
-      setState((current) => advanceProduction(current, designRef.current, delta));
+      setState((current) => advanceProduction(current, designRef.current, LEVEL_CONFIG, delta));
       frameRef.current = requestAnimationFrame(loop);
     };
     frameRef.current = requestAnimationFrame(loop);
@@ -139,7 +139,7 @@ export function MiniFactoryGame() {
       return;
     }
     setConnectingFrom(null);
-    setState((current) => startProduction(current, { edited: editedWhilePaused, design }));
+    setState((current) => startProduction(current, { edited: editedWhilePaused, design, level: LEVEL_CONFIG }));
     setEditedWhilePaused(false);
     setToast(editedWhilePaused ? "设计已更新，本轮生产从零开始。" : "产线启动，布局已锁定。");
   };
@@ -152,7 +152,7 @@ export function MiniFactoryGame() {
   const resetAttempt = (keepDesign: boolean) => {
     const nextDesign = keepDesign ? design : createEmptyDesign();
     setDesign(nextDesign);
-    setState(createProductionState(nextDesign));
+    setState(createProductionState(nextDesign, LEVEL_CONFIG));
     setConnectingFrom(null);
     setEditedWhilePaused(false);
     setToast(keepDesign ? "生产状态已清空，设备和连线为你保留。" : "画布已清空，重新设计吧。 ");

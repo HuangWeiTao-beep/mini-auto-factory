@@ -181,7 +181,7 @@ export function removeConnection(design, connectionId) {
     : { ...design, connections };
 }
 
-export function createProductionState(design, level = LEVEL_CONFIG) {
+export function createProductionState(design, _level = LEVEL_CONFIG) {
   const sources = {};
   const machines = {};
   for (const device of Object.values(design.devices)) {
@@ -210,7 +210,6 @@ export function createProductionState(design, level = LEVEL_CONFIG) {
     elapsed: 0,
     completed: 0,
     sources,
-    source: Object.values(sources)[0] ?? { elapsed: 0, output: null, pulse: 0 },
     machines,
     lines,
     warning: null,

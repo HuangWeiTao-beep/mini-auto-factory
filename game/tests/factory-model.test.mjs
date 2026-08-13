@@ -68,6 +68,16 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(nextUnlockedLevel(5, 5), 5);
 });
 
+test("production state indexes every source by device id without a legacy source alias", () => {
+  let design = createEmptyDesign();
+  design = addDevice(design, "source", 80, 180, "source-a");
+  design = addDevice(design, "source", 290, 180, "source-b");
+  const state = createProductionState(design, LEVELS[1]);
+
+  assert.deepEqual(Object.keys(state.sources), ["source-a", "source-b"]);
+  assert.equal("source" in state, false);
+});
+
 test("the correct line completes ten bolts exactly at 36.5 seconds", () => {
   const state = simulate(createCorrectDesign(), 36.5);
   assert.equal(state.completed, 10);

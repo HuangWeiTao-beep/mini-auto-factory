@@ -57,7 +57,6 @@ export interface ProductionState {
   elapsed: number;
   completed: number;
   sources: Record<string, SourceState>;
-  source: SourceState;
   machines: Record<string, {
     status: string;
     active: MaterialType | null;

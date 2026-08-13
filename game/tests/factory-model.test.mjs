@@ -4,12 +4,14 @@ import test from "node:test";
 import {
   addDevice,
   advanceProduction,
+  canPlaceDevice,
   connectDevices,
   createEmptyDesign,
   createProductionState,
   getDeviceLimit,
   getLevelConfig,
   LEVELS,
+  moveDevice,
   nextUnlockedLevel,
   outgoing,
   pauseProduction,
@@ -78,6 +80,44 @@ function createLevelThreeDesign(branchCount) {
     design = connectDevices(design, `drill-${suffix}`, "exit", LEVELS[3]);
   }
 
+  return design;
+}
+
+function createLevelFourLineDesign(cutterGridX) {
+  let design = createEmptyDesign();
+  design = addDevice(design, "source", 36, 36, "source");
+  design = addDevice(design, "cutter", cutterGridX * 36, 36, "cutter");
+  return connectDevices(design, "source", "cutter", LEVELS[4]);
+}
+
+function launchLevelFourLine(design) {
+  const state = createProductionState(design, LEVELS[4]);
+  state.mode = "running";
+  state.sources.source.output = "rod";
+  return advanceProduction(state, design, LEVELS[4], 0.01);
+}
+
+function createCompactLevelFiveDesign() {
+  let design = createEmptyDesign();
+  const branches = [
+    { suffix: "a", row: 2 },
+    { suffix: "b", row: 4 },
+  ];
+
+  for (const { suffix, row } of branches) {
+    design = addDevice(design, "source", 36, row * 36, `source-${suffix}`);
+    design = addDevice(design, "cutter", 72, row * 36, `cutter-${suffix}`);
+    design = addDevice(design, "lathe", 108, row * 36, `lathe-${suffix}`);
+    design = addDevice(design, "drill", 144, row * 36, `drill-${suffix}`);
+  }
+  design = addDevice(design, "exit", 180, 108, "exit");
+
+  for (const { suffix } of branches) {
+    design = connectDevices(design, `source-${suffix}`, `cutter-${suffix}`, LEVELS[5]);
+    design = connectDevices(design, `cutter-${suffix}`, `lathe-${suffix}`, LEVELS[5]);
+    design = connectDevices(design, `lathe-${suffix}`, `drill-${suffix}`, LEVELS[5]);
+    design = connectDevices(design, `drill-${suffix}`, "exit", LEVELS[5]);
+  }
   return design;
 }
 
@@ -208,6 +248,81 @@ test("level five permits fan-out and fan-in connections", () => {
 
   assert.equal(outgoing(design, "source").length, 2);
   assert.equal(design.connections.filter(({ to }) => to === "lathe").length, 2);
+});
+
+test("level four rejects obstacle placement but allows a connection across the obstacle", () => {
+  const emptyDesign = createEmptyDesign();
+  assert.equal(
+    canPlaceDevice(emptyDesign, LEVELS[4], { gridX: 7, gridY: 3 }),
+    false,
+  );
+
+  let designAcrossObstacle = createEmptyDesign();
+  designAcrossObstacle = addDevice(designAcrossObstacle, "cutter", 36, 108, "cutter");
+  designAcrossObstacle = addDevice(designAcrossObstacle, "lathe", 468, 108, "lathe");
+  assert.equal(
+    canPlaceDevice(designAcrossObstacle, LEVELS[4], { gridX: 1, gridY: 3 }),
+    false,
+  );
+  assert.equal(
+    canPlaceDevice(
+      designAcrossObstacle,
+      LEVELS[4],
+      { gridX: 1, gridY: 3 },
+      "cutter",
+    ),
+    true,
+  );
+  assert.notEqual(
+    connectDevices(designAcrossObstacle, "cutter", "lathe", LEVELS[4]),
+    designAcrossObstacle,
+  );
+});
+
+test("a longer level-four line takes longer to deliver the same material", () => {
+  const compactDesign = createLevelFourLineDesign(2);
+  const longDesign = createLevelFourLineDesign(7);
+
+  const compactLaunched = launchLevelFourLine(compactDesign);
+  const longLaunched = launchLevelFourLine(longDesign);
+  assert.equal(compactLaunched.lines["source->cutter"].item.transportDuration, 0.5);
+  assert.equal(longLaunched.lines["source->cutter"].item.transportDuration, 3);
+
+  assert.equal(
+    advanceProduction(compactLaunched, compactDesign, LEVELS[4], 0.49).machines.cutter.active,
+    null,
+  );
+  assert.equal(
+    advanceProduction(longLaunched, longDesign, LEVELS[4], 2.99).machines.cutter.active,
+    null,
+  );
+  assert.equal(
+    advanceProduction(longLaunched, longDesign, LEVELS[4], 3).machines.cutter.active,
+    "rod",
+  );
+});
+
+test("a launched level-four item keeps its original transport duration after devices move", () => {
+  const longDesign = createLevelFourLineDesign(7);
+  const launched = launchLevelFourLine(longDesign);
+  const movedDesign = moveDevice(longDesign, "cutter", 72, 36);
+
+  assert.equal(
+    advanceProduction(launched, movedDesign, LEVELS[4], 0.5).machines.cutter.active,
+    null,
+  );
+  assert.equal(
+    advanceProduction(launched, movedDesign, LEVELS[4], 3).machines.cutter.active,
+    "rod",
+  );
+});
+
+test("a compact level-five layout completes fourteen bolts within thirty-two seconds", () => {
+  const state = simulateAtLevel(createCompactLevelFiveDesign(), LEVELS[5], 32);
+
+  assert.equal(state.completed, 14);
+  assert.equal(state.mode, "success");
+  assert.ok(state.elapsed <= 32);
 });
 
 test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {

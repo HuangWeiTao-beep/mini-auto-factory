@@ -29,6 +29,8 @@ export interface Device {
   type: DeviceType;
   x: number;
   y: number;
+  gridX: number;
+  gridY: number;
 }
 
 export interface Connection {
@@ -44,7 +46,12 @@ export interface FactoryDesign {
 }
 
 export interface LineState extends Connection {
-  item: null | { kind: MaterialType; progress: number; status: string };
+  item: null | {
+    kind: MaterialType;
+    progress: number;
+    status: string;
+    transportDuration: number;
+  };
 }
 
 export interface SourceState {
@@ -83,6 +90,7 @@ export function nextUnlockedLevel(unlockedLevel: number, completedLevelId: numbe
 export function createEmptyDesign(): FactoryDesign;
 export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y: number, id?: string): FactoryDesign;
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;
+export function canPlaceDevice(design: FactoryDesign, level: LevelConfig, cell: GridCell, ignoredDeviceId?: string | null): boolean;
 export function connectDevices(design: FactoryDesign, from: string, to: string, level?: LevelConfig): FactoryDesign;
 export function removeConnection(design: FactoryDesign, connectionId: string): FactoryDesign;
 export function outgoing(design: FactoryDesign, deviceId: string): Connection[];

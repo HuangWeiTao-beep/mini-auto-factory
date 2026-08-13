@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  GRID,
   isObstaclePlacement,
   manhattanDistance,
   snapToGrid,
@@ -37,4 +38,11 @@ test("grid helpers snap positions and reject only obstacle placement", () => {
     manhattanDistance({ gridX: 1, gridY: 1 }, { gridX: 4, gridY: 3 }),
     5,
   );
+});
+
+test("the level-four obstacle cells remain valid grid coordinates", () => {
+  for (const obstacle of LEVELS[4].obstacles) {
+    assert.equal(obstacle.gridX >= 0 && obstacle.gridX < GRID.columns, true);
+    assert.equal(obstacle.gridY >= 0 && obstacle.gridY < GRID.rows, true);
+  }
 });

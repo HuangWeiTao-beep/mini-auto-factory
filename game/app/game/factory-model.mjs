@@ -15,7 +15,11 @@ export const MATERIALS = {
   undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
 };
 
-import { manhattanDistance, snapToGrid } from "./factory-grid.mjs";
+import {
+  isObstaclePlacement,
+  manhattanDistance,
+  snapToGrid,
+} from "./factory-grid.mjs";
 
 const freezeLevel = (level) =>
   Object.freeze({
@@ -139,21 +143,33 @@ export function createEmptyDesign() {
 
 export function addDevice(design, type, x, y, id = crypto.randomUUID()) {
   if (!DEVICE_TYPES[type] || design.devices[id]) return design;
+  const { gridX, gridY } = snapToGrid(x, y);
   return {
     ...design,
-    devices: { ...design.devices, [id]: { id, type, x, y } },
+    devices: { ...design.devices, [id]: { id, type, x, y, gridX, gridY } },
   };
 }
 
 export function moveDevice(design, id, x, y) {
   if (!design.devices[id]) return design;
+  const { gridX, gridY } = snapToGrid(x, y);
   return {
     ...design,
     devices: {
       ...design.devices,
-      [id]: { ...design.devices[id], x, y },
+      [id]: { ...design.devices[id], x, y, gridX, gridY },
     },
   };
+}
+
+export function canPlaceDevice(design, level, cell, ignoredDeviceId = null) {
+  if (isObstaclePlacement(level, cell)) return false;
+  return !Object.values(design.devices).some(
+    (device) =>
+      device.id !== ignoredDeviceId &&
+      device.gridX === cell.gridX &&
+      device.gridY === cell.gridY,
+  );
 }
 
 function allowsParallelConnections(level) {
@@ -323,11 +339,20 @@ function deliverToTarget(state, design, level, line) {
   return false;
 }
 
-function trySend(state, design, deviceId, kind, clearOutput) {
+function trySend(state, design, level, deviceId, kind, clearOutput) {
   const connection = selectOutgoingLine(state, design, deviceId);
   if (!connection) return false;
   const line = state.lines[connection.id];
-  line.item = { kind, progress: 0, status: "moving" };
+  line.item = {
+    kind,
+    progress: 0,
+    status: "moving",
+    transportDuration: getTransportDuration(
+      level,
+      design.devices[connection.from],
+      design.devices[connection.to],
+    ),
+  };
   clearOutput();
   const connections = outgoing(design, deviceId);
   state.routingCursor[deviceId] =
@@ -339,16 +364,6 @@ function outputFor(level, type) {
   return type === "lathe" && level.id >= 2
     ? "undrilledBolt"
     : DEVICE_TYPES[type].produces;
-}
-
-function transportDuration(level, design, line) {
-  const from = design.devices[line.from];
-  const to = design.devices[line.to];
-  return getTransportDuration(
-    level,
-    snapToGrid(from.x, from.y),
-    snapToGrid(to.x, to.y),
-  );
 }
 
 function tick(state, design, level, delta) {
@@ -370,7 +385,7 @@ function tick(state, design, level, delta) {
     if (line.item?.status === "moving") {
       line.item.progress = Math.min(
         1,
-        line.item.progress + delta / transportDuration(level, design, line),
+        line.item.progress + delta / line.item.transportDuration,
       );
     }
   }
@@ -399,7 +414,7 @@ function tick(state, design, level, delta) {
 
   for (const [id, source] of Object.entries(state.sources)) {
     if (source.output) {
-      trySend(state, design, id, source.output, () => {
+      trySend(state, design, level, id, source.output, () => {
         source.output = null;
       });
     }
@@ -407,7 +422,7 @@ function tick(state, design, level, delta) {
 
   for (const [id, machine] of Object.entries(state.machines)) {
     if (machine.output) {
-      trySend(state, design, id, machine.output, () => {
+      trySend(state, design, level, id, machine.output, () => {
         machine.output = null;
         machine.status = "idle";
       });

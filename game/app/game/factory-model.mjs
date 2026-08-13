@@ -176,9 +176,13 @@ export function connectDevices(design, from, to, level = LEVEL_CONFIG) {
     if (design.connections.some((connection) => connection.from === from)) return design;
     if (design.connections.some((connection) => connection.to === to)) return design;
   }
-  const branchIndex = design.connections.filter(
-    (connection) => connection.from === from,
-  ).length;
+  const branchIndex =
+    design.connections
+      .filter((connection) => connection.from === from)
+      .reduce(
+        (maxIndex, connection) => Math.max(maxIndex, connection.branchIndex),
+        -1,
+      ) + 1;
   return {
     ...design,
     connections: [

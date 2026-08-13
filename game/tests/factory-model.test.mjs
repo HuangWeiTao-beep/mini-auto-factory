@@ -11,7 +11,9 @@ import {
   getLevelConfig,
   LEVELS,
   nextUnlockedLevel,
+  outgoing,
   pauseProduction,
+  removeConnection,
   startProduction,
 } from "../app/game/factory-model.mjs";
 
@@ -160,6 +162,52 @@ test("level three permits a second outgoing branch and assigns branch indexes", 
     ],
   );
   assert.equal(duplicate, design);
+});
+
+test("removing an outbound branch does not reuse its index and routing stays ordered", () => {
+  let design = createEmptyDesign();
+  design = addDevice(design, "source", 80, 180, "source");
+  for (const suffix of ["a", "b", "c"]) {
+    design = addDevice(design, "cutter", 290, 180, `cutter-${suffix}`);
+  }
+  design = connectDevices(design, "source", "cutter-a", LEVELS[3]);
+  design = connectDevices(design, "source", "cutter-b", LEVELS[3]);
+  design = removeConnection(design, "source->cutter-a");
+  design = connectDevices(design, "source", "cutter-c", LEVELS[3]);
+
+  assert.deepEqual(
+    outgoing(design, "source").map(({ id, branchIndex }) => ({ id, branchIndex })),
+    [
+      { id: "source->cutter-b", branchIndex: 1 },
+      { id: "source->cutter-c", branchIndex: 2 },
+    ],
+  );
+
+  const state = createProductionState(design, LEVELS[3]);
+  state.mode = "running";
+  state.sources.source.output = "rod";
+  const afterB = advanceProduction(state, design, LEVELS[3], 0.01);
+  assert.equal(afterB.lines["source->cutter-b"].item?.status, "moving");
+  assert.equal(afterB.routingCursor.source, 1);
+
+  afterB.sources.source.output = "rod";
+  const afterC = advanceProduction(afterB, design, LEVELS[3], 0.01);
+  assert.equal(afterC.lines["source->cutter-c"].item?.status, "moving");
+});
+
+test("level five permits fan-out and fan-in connections", () => {
+  let design = createEmptyDesign();
+  design = addDevice(design, "source", 80, 180, "source");
+  design = addDevice(design, "cutter", 290, 80, "cutter-a");
+  design = addDevice(design, "cutter", 290, 280, "cutter-b");
+  design = addDevice(design, "lathe", 500, 180, "lathe");
+  design = connectDevices(design, "source", "cutter-a", LEVELS[5]);
+  design = connectDevices(design, "source", "cutter-b", LEVELS[5]);
+  design = connectDevices(design, "cutter-a", "lathe", LEVELS[5]);
+  design = connectDevices(design, "cutter-b", "lathe", LEVELS[5]);
+
+  assert.equal(outgoing(design, "source").length, 2);
+  assert.equal(design.connections.filter(({ to }) => to === "lathe").length, 2);
 });
 
 test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {

@@ -18,6 +18,7 @@ test("server-renders the mini factory game shell", async () => {
   const html = await renderHome();
   assert.match(html, /<title>迷你自动化工厂｜螺栓生产<\/title>/);
   assert.match(html, /第 1 关：螺栓生产/);
-  assert.match(html, /60 秒内生产 10 个合格螺栓/);
+  assert.match(html, /60 秒内生产/);
+  assert.match(html, /10<\/b> 个合格螺栓/);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/);
 });

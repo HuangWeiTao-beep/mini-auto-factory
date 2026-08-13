@@ -411,7 +411,7 @@ test("pause freezes production and editing makes the next start a clean attempt"
   assert.equal(Object.values(reset.lines).every((line) => line.item === null), true);
 });
 
-test("editing a paused level-four attempt restarts its full forty-five second run", () => {
+test("editing a paused level-four attempt restarts its full fifty second run", () => {
   let design = createEmptyDesign();
   for (const [index, type] of ["source", "cutter", "lathe", "drill", "exit"].entries()) {
     design = addDevice(design, type, (index + 1) * 36, 36, type);
@@ -442,7 +442,7 @@ test("editing a paused level-four attempt restarts its full forty-five second ru
   });
   assert.equal(reset.elapsed, 0);
   assert.equal(reset.completed, 0);
-  assert.equal(LEVELS[4].duration, 45);
+  assert.equal(LEVELS[4].duration, 50);
 });
 
 test("an incomplete design fails exactly at the sixty second limit", () => {

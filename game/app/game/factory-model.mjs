@@ -78,7 +78,7 @@ export const LEVELS = Object.freeze({
     id: 4,
     name: "有限工位",
     routeHint: "避开障碍，缩短关键连接",
-    duration: 45,
+    duration: 50,
     target: 10,
     deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
     transportMode: "distance",

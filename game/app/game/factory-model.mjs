@@ -11,13 +11,120 @@ export const MATERIALS = {
   bolt: { label: "螺栓", shortLabel: "螺栓" },
 };
 
-export const LEVEL_CONFIG = {
-  duration: 60,
-  target: 10,
-  transportDuration: 0.5,
-  sourceInterval: 3,
-  step: 0.01,
-};
+import { manhattanDistance } from "./factory-grid.mjs";
+
+const freezeLevel = (level) =>
+  Object.freeze({
+    ...level,
+    deviceLimits: Object.freeze({ ...level.deviceLimits }),
+    machineDurations: Object.freeze({ ...level.machineDurations }),
+    obstacles: Object.freeze(
+      level.obstacles.map((obstacle) => Object.freeze({ ...obstacle })),
+    ),
+  });
+
+export const LEVELS = Object.freeze({
+  1: freezeLevel({
+    id: 1,
+    name: "螺栓生产",
+    routeHint: "钢棒源 → 切割机 → 车削机 → 成品出口",
+    duration: 60,
+    target: 10,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 0, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+    obstacles: [],
+    step: 0.01,
+  }),
+  2: freezeLevel({
+    id: 2,
+    name: "钻孔定位",
+    routeHint: "钢棒源 → 切割机 → 车削机 → 钻孔机 → 成品出口",
+    duration: 45,
+    target: 10,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+    obstacles: [],
+    step: 0.01,
+  }),
+  3: freezeLevel({
+    id: 3,
+    name: "产能告急",
+    routeHint: "两条对称支路汇入成品出口",
+    duration: 27,
+    target: 12,
+    deviceLimits: { source: 2, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 1,
+    machineDurations: { cutter: 1, lathe: 3, drill: 1 },
+    obstacles: [],
+    step: 0.01,
+  }),
+  4: freezeLevel({
+    id: 4,
+    name: "有限工位",
+    routeHint: "避开障碍，缩短关键连接",
+    duration: 45,
+    target: 10,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+    obstacles: [
+      { gridX: 7, gridY: 3 },
+      { gridX: 12, gridY: 7 },
+      { gridX: 17, gridY: 3 },
+    ],
+    step: 0.01,
+  }),
+  5: freezeLevel({
+    id: 5,
+    name: "工厂验收",
+    routeHint: "两条紧凑支路汇入成品出口",
+    duration: 32,
+    target: 14,
+    deviceLimits: { source: 2, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 1,
+    machineDurations: { cutter: 1, lathe: 3, drill: 1 },
+    obstacles: [
+      { gridX: 7, gridY: 3 },
+      { gridX: 12, gridY: 7 },
+      { gridX: 17, gridY: 3 },
+      { gridX: 7, gridY: 10 },
+      { gridX: 17, gridY: 10 },
+    ],
+    step: 0.01,
+  }),
+});
+
+export const LEVEL_CONFIG = LEVELS[1];
+
+export function getLevelConfig(levelId) {
+  return LEVELS[levelId];
+}
+
+export function getDeviceLimit(level, type) {
+  return level.deviceLimits[type] ?? 0;
+}
+
+export function getTransportDuration(level, from, to) {
+  return level.transportMode === "distance"
+    ? 0.5 * Math.max(1, manhattanDistance(from, to))
+    : 0.5;
+}
+
+export function nextUnlockedLevel(unlockedLevel, completedLevelId) {
+  return Math.max(unlockedLevel, Math.min(5, completedLevelId + 1));
+}
 
 const round = (value) => Math.round(value * 1000) / 1000;
 const clone = (value) => structuredClone(value);

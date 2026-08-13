@@ -1,6 +1,28 @@
 export type DeviceType = "source" | "cutter" | "lathe" | "exit";
+export type LevelDeviceType = DeviceType | "drill";
 export type MaterialType = "rod" | "blank" | "bolt";
 export type GameMode = "design" | "running" | "paused" | "success" | "failure";
+export type TransportMode = "fixed" | "distance";
+
+export interface GridCell {
+  gridX: number;
+  gridY: number;
+}
+
+export interface LevelConfig {
+  id: number;
+  name: string;
+  routeHint: string;
+  duration: number;
+  target: number;
+  deviceLimits: Readonly<Record<LevelDeviceType, number>>;
+  transportMode: TransportMode;
+  transportDuration: number;
+  sourceInterval: number;
+  machineDurations: Readonly<Record<"cutter" | "lathe" | "drill", number>>;
+  obstacles: readonly GridCell[];
+  step: number;
+}
 
 export interface Device {
   id: string;
@@ -43,7 +65,12 @@ export interface ProductionState {
 
 export const DEVICE_TYPES: Record<DeviceType, { label: string; accepts: MaterialType | null; produces: MaterialType | null; duration: number }>;
 export const MATERIALS: Record<MaterialType, { label: string; shortLabel: string }>;
-export const LEVEL_CONFIG: { duration: number; target: number; transportDuration: number; sourceInterval: number; step: number };
+export const LEVELS: Readonly<Record<number, LevelConfig>>;
+export const LEVEL_CONFIG: LevelConfig;
+export function getLevelConfig(levelId: number): LevelConfig | undefined;
+export function getDeviceLimit(level: LevelConfig, type: LevelDeviceType): number;
+export function getTransportDuration(level: LevelConfig, from: GridCell, to: GridCell): number;
+export function nextUnlockedLevel(unlockedLevel: number, completedLevelId: number): number;
 export function createEmptyDesign(): FactoryDesign;
 export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y: number, id?: string): FactoryDesign;
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;

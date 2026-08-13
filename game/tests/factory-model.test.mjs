@@ -7,6 +7,10 @@ import {
   connectDevices,
   createEmptyDesign,
   createProductionState,
+  getDeviceLimit,
+  getLevelConfig,
+  LEVELS,
+  nextUnlockedLevel,
   pauseProduction,
   startProduction,
 } from "../app/game/factory-model.mjs";
@@ -34,6 +38,13 @@ function simulate(design, seconds) {
     seconds,
   );
 }
+
+test("level helpers expose limits and unlock only the next chapter level", () => {
+  assert.equal(getLevelConfig(4), LEVELS[4]);
+  assert.equal(getDeviceLimit(LEVELS[3], "lathe"), 2);
+  assert.equal(nextUnlockedLevel(2, 3), 4);
+  assert.equal(nextUnlockedLevel(5, 5), 5);
+});
 
 test("the correct line completes ten bolts before sixty seconds", () => {
   const state = simulate(createCorrectDesign(), 36.7);

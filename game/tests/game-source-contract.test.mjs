@@ -69,6 +69,19 @@ test("the feedback bar distinguishes quality, blocked targets and routing waits"
   assert.match(game, /分支 .* 正在等待/);
 });
 
+test("settlement copy follows the active level and level five has no next-level action", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(game, /level\.routeHint/);
+  assert.match(game, /state\.completed\} \/ \{level\.target/);
+  assert.match(game, /第 \$\{activeLevelId \+ 1\} 关已解锁/);
+  assert.match(game, /第一章全部验收通过/);
+  assert.match(game, /const hasNextLevel = activeLevelId < 5/);
+  assert.match(game, /state\.mode === "success" && hasNextLevel/);
+});
+
 test("obstacles stay above overlapping adjacent machine footprints", async () => {
   const styles = await readFile(
     new URL("../app/game/game.css", import.meta.url),

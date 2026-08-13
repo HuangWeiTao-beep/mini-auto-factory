@@ -60,6 +60,7 @@ export function MiniFactoryGame() {
   const locked = state.mode === "running";
   const remaining = Math.max(0, level.duration - state.elapsed);
   const completion = (state.completed / level.target) * 100;
+  const hasNextLevel = activeLevelId < 5;
   const settlementOpen = state.mode === "success" || state.mode === "failure";
   const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
   const blockedLine = Object.values(state.lines).find(
@@ -403,7 +404,11 @@ export function MiniFactoryGame() {
             <span className="settlement-kicker">PRODUCTION REPORT</span>
             <div className="settlement-icon">{state.mode === "success" ? "✓" : "!"}</div>
             <h2 id="settlement-title">{state.mode === "success" ? `第 ${activeLevelId} 关完成！` : `第 ${activeLevelId} 关未完成`}</h2>
-            <p>{state.mode === "success" ? `${level.name}稳定运行，下一张工单可以进场了。` : `检查「${level.routeHint}」，确保物料经过完整加工流程。`}</p>
+            <p>{state.mode === "success"
+              ? hasNextLevel
+                ? `${level.name}稳定运行，第 ${activeLevelId + 1} 关已解锁。`
+                : `${level.name}稳定运行，第一章全部验收通过。`
+              : `本关目标是 ${level.duration} 秒内完成 ${level.target} 个合格螺栓。检查「${level.routeHint}」，确保物料经过完整加工流程。`}</p>
             <div className="settlement-stats">
               <div><small>合格螺栓</small><strong>{state.completed} / {level.target}</strong></div>
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>
@@ -411,7 +416,7 @@ export function MiniFactoryGame() {
             </div>
             <div className="settlement-actions">
               <button className="settlement-primary" onClick={() => resetAttempt(true)} autoFocus>重新挑战</button>
-              {state.mode === "success" && activeLevelId < 5 && (
+              {state.mode === "success" && hasNextLevel && (
                 <button onClick={() => selectLevel(activeLevelId + 1)}>下一关</button>
               )}
               <button onClick={openLevelSelect}>返回关卡选择</button>

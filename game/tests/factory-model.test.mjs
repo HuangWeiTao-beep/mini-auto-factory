@@ -128,6 +128,11 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(nextUnlockedLevel(5, 5), 5);
 });
 
+test("success unlocks the next level while completing level five keeps the chapter capped", () => {
+  assert.equal(nextUnlockedLevel(1, 1), 2);
+  assert.equal(nextUnlockedLevel(5, 5), 5);
+});
+
 test("production state indexes every source by device id without a legacy source alias", () => {
   let design = createEmptyDesign();
   design = addDevice(design, "source", 80, 180, "source-a");
@@ -389,6 +394,40 @@ test("pause freezes production and editing makes the next start a clean attempt"
   assert.equal(reset.completed, 0);
   assert.equal(reset.mode, "running");
   assert.equal(Object.values(reset.lines).every((line) => line.item === null), true);
+});
+
+test("editing a paused level-four attempt restarts its full forty-five second run", () => {
+  let design = createEmptyDesign();
+  for (const [index, type] of ["source", "cutter", "lathe", "drill", "exit"].entries()) {
+    design = addDevice(design, type, (index + 1) * 36, 36, type);
+  }
+  design = connectDevices(design, "source", "cutter", LEVELS[4]);
+  design = connectDevices(design, "cutter", "lathe", LEVELS[4]);
+  design = connectDevices(design, "lathe", "drill", LEVELS[4]);
+  design = connectDevices(design, "drill", "exit", LEVELS[4]);
+
+  const running = advanceProduction(
+    startProduction(createProductionState(design, LEVELS[4]), {
+      edited: false,
+      design,
+      level: LEVELS[4],
+    }),
+    design,
+    LEVELS[4],
+    20,
+  );
+  const paused = pauseProduction(running);
+  assert.ok(paused.elapsed > 0);
+  assert.ok(paused.completed > 0);
+
+  const reset = startProduction(paused, {
+    edited: true,
+    design,
+    level: LEVELS[4],
+  });
+  assert.equal(reset.elapsed, 0);
+  assert.equal(reset.completed, 0);
+  assert.equal(LEVELS[4].duration, 45);
 });
 
 test("an incomplete design fails exactly at the sixty second limit", () => {

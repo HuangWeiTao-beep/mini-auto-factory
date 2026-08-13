@@ -21,7 +21,8 @@ import {
 } from "./factory-model.mjs";
 import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
 import { snapToGrid } from "./factory-grid.mjs";
-import { getPlayerFeedback } from "./feedback-policy.mjs";
+import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
+import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -40,7 +41,7 @@ export function MiniFactoryGame() {
   const [activeLevelId, setActiveLevelId] = useState(1);
   const [unlockedLevel, setUnlockedLevel] = useState(1);
   const [design, setDesign] = useState<FactoryDesign>(starterDesign);
-  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign(), LEVELS[1]));
+  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign()));
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
@@ -105,21 +106,27 @@ export function MiniFactoryGame() {
     contextualFeedback?.message ?? state.warning,
     toast,
   );
-
-  const markEdited = useCallback(() => {
-    if (state.mode === "paused") setEditedWhilePaused(true);
-  }, [state.mode]);
+  const failureDiagnostic = getFailureDiagnostic(
+    state.warning,
+    contextualFeedback?.message,
+    level.routeHint,
+  );
+  const productionActionLabel = getProductionActionLabel(state.mode, editedWhilePaused);
 
   const mutateDesign = useCallback((mutation: (current: FactoryDesign) => FactoryDesign) => {
-    setDesign((current) => {
-      const next = mutation(current);
-      if (next !== current && state.mode !== "paused") {
-        setState(createProductionState(next, level));
-      }
-      return next;
-    });
-    markEdited();
-  }, [level, markEdited, state.mode]);
+    const next = mutation(design);
+    if (next === design) return;
+    setDesign(next);
+    setEditedWhilePaused((edited) => markDesignEdited(
+      state.mode,
+      edited,
+      design,
+      next,
+    ));
+    if (state.mode !== "paused") {
+      setState(createProductionState(next));
+    }
+  }, [design, state.mode]);
 
   useEffect(() => {
     designRef.current = design;
@@ -235,7 +242,7 @@ export function MiniFactoryGame() {
   const resetAttempt = (keepDesign: boolean) => {
     const nextDesign = keepDesign ? design : createEmptyDesign();
     setDesign(nextDesign);
-    setState(createProductionState(nextDesign, level));
+    setState(createProductionState(nextDesign));
     setConnectingFrom(null);
     setEditedWhilePaused(false);
     setToast(keepDesign ? "生产状态已清空，设备和连线为你保留。" : "画布已清空，重新设计吧。 ");
@@ -276,7 +283,7 @@ export function MiniFactoryGame() {
     const nextDesign = createEmptyDesign();
     setActiveLevelId(levelId);
     setDesign(nextDesign);
-    setState(createProductionState(nextDesign, LEVELS[levelId]));
+    setState(createProductionState(nextDesign));
     setConnectingFrom(null);
     setEditedWhilePaused(false);
     setShowLevelSelect(false);
@@ -369,7 +376,7 @@ export function MiniFactoryGame() {
         <div className="control-buttons">
           {state.mode !== "running" ? (
             <button className="primary-control" onClick={handleStart}>
-              <span>▶</span>{state.mode === "paused" && !editedWhilePaused ? "继续生产" : "开始生产"}
+              <span>▶</span>{productionActionLabel}
             </button>
           ) : (
             <button className="pause-control" onClick={handlePause}><span>Ⅱ</span>暂停生产</button>
@@ -408,7 +415,7 @@ export function MiniFactoryGame() {
               ? hasNextLevel
                 ? `${level.name}稳定运行，第 ${activeLevelId + 1} 关已解锁。`
                 : `${level.name}稳定运行，第一章全部验收通过。`
-              : `本关目标是 ${level.duration} 秒内完成 ${level.target} 个合格螺栓。检查「${level.routeHint}」，确保物料经过完整加工流程。`}</p>
+              : failureDiagnostic}</p>
             <div className="settlement-stats">
               <div><small>合格螺栓</small><strong>{state.completed} / {level.target}</strong></div>
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>

@@ -5,3 +5,9 @@ export function getPlayerFeedback(
   warning: string | null,
   latestFeedback: string,
 ): string;
+
+export function getFailureDiagnostic(
+  warning: string | null,
+  contextualFeedback: string | null | undefined,
+  routeHint: string,
+): string;

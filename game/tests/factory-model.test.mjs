@@ -54,7 +54,7 @@ function createLevelTwoDesign(withDrill) {
 
 function simulateAtLevel(design, level, seconds) {
   return advanceProduction(
-    startProduction(createProductionState(design, level), {
+    startProduction(createProductionState(design), {
       edited: false,
       design,
       level,
@@ -91,7 +91,7 @@ function createLevelFourLineDesign(cutterGridX) {
 }
 
 function launchLevelFourLine(design) {
-  const state = createProductionState(design, LEVELS[4]);
+  const state = createProductionState(design);
   state.mode = "running";
   state.sources.source.output = "rod";
   return advanceProduction(state, design, LEVELS[4], 0.01);
@@ -104,8 +104,8 @@ function createCompactLevelFiveDesign() {
     { suffix: "b", row: 4 },
   ];
 
+  design = addDevice(design, "source", 36, 108, "source");
   for (const { suffix, row } of branches) {
-    design = addDevice(design, "source", 36, row * 36, `source-${suffix}`);
     design = addDevice(design, "cutter", 72, row * 36, `cutter-${suffix}`);
     design = addDevice(design, "lathe", 108, row * 36, `lathe-${suffix}`);
     design = addDevice(design, "drill", 144, row * 36, `drill-${suffix}`);
@@ -113,7 +113,7 @@ function createCompactLevelFiveDesign() {
   design = addDevice(design, "exit", 180, 108, "exit");
 
   for (const { suffix } of branches) {
-    design = connectDevices(design, `source-${suffix}`, `cutter-${suffix}`, LEVELS[5]);
+    design = connectDevices(design, "source", `cutter-${suffix}`, LEVELS[5]);
     design = connectDevices(design, `cutter-${suffix}`, `lathe-${suffix}`, LEVELS[5]);
     design = connectDevices(design, `lathe-${suffix}`, `drill-${suffix}`, LEVELS[5]);
     design = connectDevices(design, `drill-${suffix}`, "exit", LEVELS[5]);
@@ -128,6 +128,15 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(nextUnlockedLevel(5, 5), 5);
 });
 
+test("levels three and five expose exactly one fast source", () => {
+  assert.equal(getDeviceLimit(LEVELS[3], "source"), 1);
+  assert.equal(getDeviceLimit(LEVELS[5], "source"), 1);
+});
+
+test("level five exposes the workshop acceptance display name", () => {
+  assert.equal(getLevelConfig(5).name, "工坊验收");
+});
+
 test("success unlocks the next level while completing level five keeps the chapter capped", () => {
   assert.equal(nextUnlockedLevel(1, 1), 2);
   assert.equal(nextUnlockedLevel(5, 5), 5);
@@ -137,7 +146,7 @@ test("production state indexes every source by device id without a legacy source
   let design = createEmptyDesign();
   design = addDevice(design, "source", 80, 180, "source-a");
   design = addDevice(design, "source", 290, 180, "source-b");
-  const state = createProductionState(design, LEVELS[1]);
+  const state = createProductionState(design);
 
   assert.deepEqual(Object.keys(state.sources), ["source-a", "source-b"]);
   assert.equal("source" in state, false);
@@ -228,7 +237,7 @@ test("removing an outbound branch does not reuse its index and routing stays ord
     ],
   );
 
-  const state = createProductionState(design, LEVELS[3]);
+  const state = createProductionState(design);
   state.mode = "running";
   state.sources.source.output = "rod";
   const afterB = advanceProduction(state, design, LEVELS[3], 0.01);
@@ -322,8 +331,14 @@ test("a launched level-four item keeps its original transport duration after dev
   );
 });
 
-test("a compact level-five layout completes fourteen bolts within thirty-two seconds", () => {
-  const state = simulateAtLevel(createCompactLevelFiveDesign(), LEVELS[5], 32);
+test("a compact level-five layout fans one source into two branches and completes fourteen bolts within thirty-two seconds", () => {
+  const design = createCompactLevelFiveDesign();
+  const sources = Object.values(design.devices).filter(({ type }) => type === "source");
+
+  assert.equal(sources.length, 1);
+  assert.equal(outgoing(design, sources[0].id).length, 2);
+
+  const state = simulateAtLevel(design, LEVELS[5], 28);
 
   assert.equal(state.completed, 14);
   assert.equal(state.mode, "success");
@@ -332,7 +347,7 @@ test("a compact level-five layout completes fourteen bolts within thirty-two sec
 
 test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {
   const design = createLevelThreeDesign(2);
-  const running = startProduction(createProductionState(design, LEVELS[3]), {
+  const running = startProduction(createProductionState(design), {
     edited: false,
     design,
     level: LEVELS[3],
@@ -346,7 +361,7 @@ test("level three dispatches A then B and holds output when the selected A branc
   assert.equal(afterB.lines["source->cutter-b"].item?.status, "moving");
   assert.equal(afterB.routingCursor.source, 0);
 
-  const blocked = createProductionState(design, LEVELS[3]);
+  const blocked = createProductionState(design);
   blocked.mode = "running";
   blocked.sources.source.output = "rod";
   blocked.lines["source->cutter-a"].item = {
@@ -372,7 +387,7 @@ test("a single level-three branch cannot reach twelve bolts by 27 seconds, while
 test("pause freezes production and editing makes the next start a clean attempt", () => {
   const design = createCorrectDesign();
   const running = advanceProduction(
-    startProduction(createProductionState(design, LEVELS[1]), {
+    startProduction(createProductionState(design), {
       edited: false,
       design,
       level: LEVELS[1],
@@ -407,7 +422,7 @@ test("editing a paused level-four attempt restarts its full forty-five second ru
   design = connectDevices(design, "drill", "exit", LEVELS[4]);
 
   const running = advanceProduction(
-    startProduction(createProductionState(design, LEVELS[4]), {
+    startProduction(createProductionState(design), {
       edited: false,
       design,
       level: LEVELS[4],

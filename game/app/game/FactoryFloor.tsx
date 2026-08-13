@@ -1,5 +1,5 @@
 import type { DragEvent, RefObject } from "react";
-import { MATERIALS, getTransportDuration } from "./factory-model.mjs";
+import { MATERIALS, getTransportDuration, outgoing } from "./factory-model.mjs";
 import type { FactoryDesign, GridCell, LevelConfig, ProductionState } from "./factory-model.mjs";
 import { GRID } from "./factory-grid.mjs";
 import { MachineCard } from "./MachineCard";
@@ -94,7 +94,7 @@ export function FactoryFloor({
           const labelY = (y1 + y2) / 2;
           const transportDuration = line?.item?.transportDuration
             ?? getTransportDuration(level, from, to);
-          const showsBranchLabel = level.id === 3 || level.id === 5;
+          const showsBranchLabel = outgoing(design, connection.from).length > 1;
           return (
             <g key={connection.id}>
               <path className="connection-hit" d={d} onClick={() => !locked && onRemoveConnection(connection.id)} />

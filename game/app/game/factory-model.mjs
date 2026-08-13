@@ -66,7 +66,7 @@ export const LEVELS = Object.freeze({
     routeHint: "两条对称支路汇入成品出口",
     duration: 27,
     target: 12,
-    deviceLimits: { source: 2, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, exit: 1 },
     transportMode: "fixed",
     transportDuration: 0.5,
     sourceInterval: 1,
@@ -94,11 +94,11 @@ export const LEVELS = Object.freeze({
   }),
   5: freezeLevel({
     id: 5,
-    name: "工厂验收",
+    name: "工坊验收",
     routeHint: "两条紧凑支路汇入成品出口",
     duration: 32,
     target: 14,
-    deviceLimits: { source: 2, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, exit: 1 },
     transportMode: "distance",
     transportDuration: 0.5,
     sourceInterval: 1,
@@ -217,7 +217,7 @@ export function removeConnection(design, connectionId) {
     : { ...design, connections };
 }
 
-export function createProductionState(design, _level = LEVEL_CONFIG) {
+export function createProductionState(design) {
   const sources = {};
   const machines = {};
   for (const device of Object.values(design.devices)) {
@@ -260,7 +260,6 @@ export function startProduction(state, options = {}) {
     return {
       ...createProductionState(
         options.design ?? { devices: {}, connections: [] },
-        options.level ?? LEVEL_CONFIG,
       ),
       mode: "running",
     };

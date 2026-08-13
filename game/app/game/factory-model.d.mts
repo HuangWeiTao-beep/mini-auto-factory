@@ -94,7 +94,7 @@ export function canPlaceDevice(design: FactoryDesign, level: LevelConfig, cell: 
 export function connectDevices(design: FactoryDesign, from: string, to: string, level?: LevelConfig): FactoryDesign;
 export function removeConnection(design: FactoryDesign, connectionId: string): FactoryDesign;
 export function outgoing(design: FactoryDesign, deviceId: string): Connection[];
-export function createProductionState(design: FactoryDesign, level: LevelConfig): ProductionState;
+export function createProductionState(design: FactoryDesign): ProductionState;
 export function startProduction(state: ProductionState, options: { edited: boolean; design: FactoryDesign; level: LevelConfig }): ProductionState;
 export function pauseProduction(state: ProductionState): ProductionState;
 export function advanceProduction(state: ProductionState, design: FactoryDesign, level: LevelConfig, deltaSeconds: number): ProductionState;

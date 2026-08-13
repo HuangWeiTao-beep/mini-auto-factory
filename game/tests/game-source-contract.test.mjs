@@ -57,6 +57,8 @@ test("the floor source renders obstacles, branch labels and transport duration",
   assert.match(floor, /obstacles/);
   assert.match(floor, /branchIndex/);
   assert.match(floor, /transportDuration/);
+  assert.match(floor, /outgoing\(design, connection\.from\)\.length > 1/);
+  assert.doesNotMatch(floor, /const showsBranchLabel = level\.id === 3 \|\| level\.id === 5/);
 });
 
 test("the feedback bar distinguishes quality, blocked targets and routing waits", async () => {
@@ -80,6 +82,26 @@ test("settlement copy follows the active level and level five has no next-level 
   assert.match(game, /第一章全部验收通过/);
   assert.match(game, /const hasNextLevel = activeLevelId < 5/);
   assert.match(game, /state\.mode === "success" && hasNextLevel/);
+});
+
+test("failure settlement consumes the direct diagnostic policy before the route fallback", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /getFailureDiagnostic\(\s*state\.warning,\s*contextualFeedback\?\.message,\s*level\.routeHint,?\s*\)/);
+});
+
+test("successful paused design edits flow into the restart-production action label", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /markDesignEdited\(\s*state\.mode,\s*edited,\s*design,\s*next,?\s*\)/);
+  assert.match(game, /getProductionActionLabel\(state\.mode, editedWhilePaused\)/);
+  assert.match(game, /startProduction\(current, \{ edited: editedWhilePaused, design, level \}\)/);
 });
 
 test("obstacles stay above overlapping adjacent machine footprints", async () => {

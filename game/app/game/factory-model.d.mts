@@ -1,6 +1,6 @@
-export type DeviceType = "source" | "cutter" | "lathe" | "exit";
-export type LevelDeviceType = DeviceType | "drill";
-export type MaterialType = "rod" | "blank" | "bolt";
+export type DeviceType = "source" | "cutter" | "lathe" | "drill" | "exit";
+export type LevelDeviceType = DeviceType;
+export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt";
 export type GameMode = "design" | "running" | "paused" | "success" | "failure";
 export type TransportMode = "fixed" | "distance";
 
@@ -46,11 +46,18 @@ export interface LineState extends Connection {
   item: null | { kind: MaterialType; progress: number; status: string };
 }
 
+export interface SourceState {
+  elapsed: number;
+  output: MaterialType | null;
+  pulse: number;
+}
+
 export interface ProductionState {
   mode: GameMode;
   elapsed: number;
   completed: number;
-  source: { elapsed: number; output: MaterialType | null; pulse: number };
+  sources: Record<string, SourceState>;
+  source: SourceState;
   machines: Record<string, {
     status: string;
     active: MaterialType | null;
@@ -64,6 +71,7 @@ export interface ProductionState {
 }
 
 export const DEVICE_TYPES: Record<DeviceType, { label: string; accepts: MaterialType | null; produces: MaterialType | null; duration: number }>;
+export const PROCESSING_TYPES: ReadonlySet<"cutter" | "lathe" | "drill">;
 export const MATERIALS: Record<MaterialType, { label: string; shortLabel: string }>;
 export const LEVELS: Readonly<Record<number, LevelConfig>>;
 export const LEVEL_CONFIG: LevelConfig;
@@ -76,7 +84,7 @@ export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y:
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;
 export function connectDevices(design: FactoryDesign, from: string, to: string): FactoryDesign;
 export function removeConnection(design: FactoryDesign, connectionId: string): FactoryDesign;
-export function createProductionState(design: FactoryDesign): ProductionState;
-export function startProduction(state: ProductionState, options?: { edited?: boolean; design?: FactoryDesign }): ProductionState;
+export function createProductionState(design: FactoryDesign, level: LevelConfig): ProductionState;
+export function startProduction(state: ProductionState, options: { edited: boolean; design: FactoryDesign; level: LevelConfig }): ProductionState;
 export function pauseProduction(state: ProductionState): ProductionState;
-export function advanceProduction(state: ProductionState, design: FactoryDesign, deltaSeconds: number): ProductionState;
+export function advanceProduction(state: ProductionState, design: FactoryDesign, level: LevelConfig, deltaSeconds: number): ProductionState;

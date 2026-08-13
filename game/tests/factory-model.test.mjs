@@ -32,9 +32,31 @@ function createCorrectDesign() {
 }
 
 function simulate(design, seconds) {
+  return simulateAtLevel(design, LEVELS[1], seconds);
+}
+
+function createLevelTwoDesign(withDrill) {
+  let design = createDesign(
+    withDrill
+      ? ["source", "cutter", "lathe", "drill", "exit"]
+      : ["source", "cutter", "lathe", "exit"],
+  );
+  design = connectDevices(design, "source", "cutter");
+  design = connectDevices(design, "cutter", "lathe");
+  design = connectDevices(design, "lathe", withDrill ? "drill" : "exit");
+  if (withDrill) design = connectDevices(design, "drill", "exit");
+  return design;
+}
+
+function simulateAtLevel(design, level, seconds) {
   return advanceProduction(
-    startProduction(createProductionState(design)),
+    startProduction(createProductionState(design, level), {
+      edited: false,
+      design,
+      level,
+    }),
     design,
+    level,
     seconds,
   );
 }
@@ -57,6 +79,20 @@ test("the first bolt follows source, transport, cutting, turning and exit timing
   const design = createCorrectDesign();
   assert.equal(simulate(design, 9.4).completed, 0);
   assert.equal(simulate(design, 9.6).completed, 1);
+});
+
+test("level two discards an undrilled bolt at the exit with a quality warning", () => {
+  const state = simulateAtLevel(createLevelTwoDesign(false), LEVELS[2], 20);
+  assert.equal(state.completed, 0);
+  assert.equal(state.warning, "\u7f3a\u5c11\u5b54\u4f4d");
+  assert.equal(Object.values(state.lines).every((line) => line.item === null), true);
+});
+
+test("level two correct line finishes ten drilled bolts by 39 seconds", () => {
+  const state = simulateAtLevel(createLevelTwoDesign(true), LEVELS[2], 39);
+  assert.equal(state.completed, 10);
+  assert.equal(state.mode, "success");
+  assert.ok(state.elapsed <= 39);
 });
 
 test("a rod sent directly to the lathe raises the specified warning", () => {
@@ -85,19 +121,24 @@ test("connection rules reject reused ports and self connections", () => {
 test("pause freezes production and editing makes the next start a clean attempt", () => {
   const design = createCorrectDesign();
   const running = advanceProduction(
-    startProduction(createProductionState(design)),
+    startProduction(createProductionState(design, LEVELS[1]), {
+      edited: false,
+      design,
+      level: LEVELS[1],
+    }),
     design,
+    LEVELS[1],
     12,
   );
   const paused = pauseProduction(running);
-  assert.deepEqual(advanceProduction(paused, design, 5), paused);
+  assert.deepEqual(advanceProduction(paused, design, LEVELS[1], 5), paused);
 
-  const resumed = startProduction(paused, { edited: false });
+  const resumed = startProduction(paused, { edited: false, design, level: LEVELS[1] });
   assert.equal(resumed.elapsed, paused.elapsed);
   assert.equal(resumed.completed, paused.completed);
   assert.equal(resumed.mode, "running");
 
-  const reset = startProduction(paused, { edited: true, design });
+  const reset = startProduction(paused, { edited: true, design, level: LEVELS[1] });
   assert.equal(reset.elapsed, 0);
   assert.equal(reset.completed, 0);
   assert.equal(reset.mode, "running");

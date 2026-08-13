@@ -3,15 +3,19 @@ export const DEVICE_TYPES = {
   cutter: { label: "切割机", accepts: "rod", produces: "blank", duration: 2 },
   lathe: { label: "车削机", accepts: "blank", produces: "bolt", duration: 3 },
   exit: { label: "成品出口", accepts: "bolt", produces: null, duration: 0 },
+  drill: { label: "钻孔机", accepts: "undrilledBolt", produces: "bolt", duration: 2 },
 };
+
+export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill"]);
 
 export const MATERIALS = {
   rod: { label: "长钢棒", shortLabel: "钢棒" },
   blank: { label: "短料", shortLabel: "短料" },
   bolt: { label: "螺栓", shortLabel: "螺栓" },
+  undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
 };
 
-import { manhattanDistance } from "./factory-grid.mjs";
+import { manhattanDistance, snapToGrid } from "./factory-grid.mjs";
 
 const freezeLevel = (level) =>
   Object.freeze({
@@ -177,10 +181,14 @@ export function removeConnection(design, connectionId) {
     : { ...design, connections };
 }
 
-export function createProductionState(design) {
+export function createProductionState(design, level = LEVEL_CONFIG) {
+  const sources = {};
   const machines = {};
   for (const device of Object.values(design.devices)) {
-    if (device.type === "cutter" || device.type === "lathe") {
+    if (device.type === "source") {
+      sources[device.id] = { elapsed: 0, output: null, pulse: 0 };
+    }
+    if (PROCESSING_TYPES.has(device.type)) {
       machines[device.id] = {
         status: "idle",
         active: null,
@@ -201,7 +209,8 @@ export function createProductionState(design) {
     mode: "design",
     elapsed: 0,
     completed: 0,
-    source: { elapsed: 0, output: null, pulse: 0 },
+    sources,
+    source: Object.values(sources)[0] ?? { elapsed: 0, output: null, pulse: 0 },
     machines,
     lines,
     warning: null,
@@ -211,7 +220,10 @@ export function createProductionState(design) {
 export function startProduction(state, options = {}) {
   if (options.edited) {
     return {
-      ...createProductionState(options.design ?? { devices: {}, connections: [] }),
+      ...createProductionState(
+        options.design ?? { devices: {}, connections: [] },
+        options.level ?? LEVEL_CONFIG,
+      ),
       mode: "running",
     };
   }
@@ -227,11 +239,17 @@ function outgoing(design, deviceId) {
   return design.connections.find((connection) => connection.from === deviceId);
 }
 
-function deliverToTarget(state, design, line) {
+function deliverToTarget(state, design, level, line) {
   const item = line.item;
   const device = design.devices[line.to];
   if (!item || !device) return false;
   const spec = DEVICE_TYPES[device.type];
+
+  if (device.type === "exit" && item.kind === "undrilledBolt") {
+    line.item = null;
+    state.warning = "缺少孔位";
+    return true;
+  }
 
   if (spec.accepts !== item.kind) {
     item.status = "blocked";
@@ -251,14 +269,14 @@ function deliverToTarget(state, design, line) {
   if (device.type === "exit") {
     state.completed += 1;
     line.item = null;
-    if (state.completed >= LEVEL_CONFIG.target) state.mode = "success";
+    if (state.completed >= level.target) state.mode = "success";
     return true;
   }
 
   const machine = state.machines[device.id];
   if (!machine.active && !machine.output) {
     machine.active = item.kind;
-    machine.remaining = spec.duration;
+    machine.remaining = level.machineDurations[device.type];
     machine.status = "working";
     line.item = null;
     return true;
@@ -282,16 +300,34 @@ function trySend(state, design, deviceId, kind, clearOutput) {
   return true;
 }
 
-function tick(state, design, delta) {
-  state.elapsed = round(state.elapsed + delta);
-  state.source.elapsed = round(state.source.elapsed + delta);
-  state.source.pulse = Math.max(0, state.source.pulse - delta);
+function outputFor(level, type) {
+  return type === "lathe" && level.id >= 2
+    ? "undrilledBolt"
+    : DEVICE_TYPES[type].produces;
+}
 
-  if (state.source.elapsed + 1e-9 >= LEVEL_CONFIG.sourceInterval) {
-    state.source.elapsed = round(state.source.elapsed - LEVEL_CONFIG.sourceInterval);
-    if (!state.source.output) {
-      state.source.output = "rod";
-      state.source.pulse = 0.25;
+function transportDuration(level, design, line) {
+  const from = design.devices[line.from];
+  const to = design.devices[line.to];
+  return getTransportDuration(
+    level,
+    snapToGrid(from.x, from.y),
+    snapToGrid(to.x, to.y),
+  );
+}
+
+function tick(state, design, level, delta) {
+  state.elapsed = round(state.elapsed + delta);
+
+  for (const source of Object.values(state.sources)) {
+    source.elapsed = round(source.elapsed + delta);
+    source.pulse = Math.max(0, source.pulse - delta);
+    if (source.elapsed + 1e-9 >= level.sourceInterval) {
+      source.elapsed = round(source.elapsed - level.sourceInterval);
+      if (!source.output) {
+        source.output = "rod";
+        source.pulse = 0.25;
+      }
     }
   }
 
@@ -299,7 +335,7 @@ function tick(state, design, delta) {
     if (line.item?.status === "moving") {
       line.item.progress = Math.min(
         1,
-        line.item.progress + delta / LEVEL_CONFIG.transportDuration,
+        line.item.progress + delta / transportDuration(level, design, line),
       );
     }
   }
@@ -308,7 +344,7 @@ function tick(state, design, delta) {
     if (machine.active) {
       machine.remaining = Math.max(0, machine.remaining - delta);
       if (machine.remaining <= 1e-9) {
-        machine.output = DEVICE_TYPES[design.devices[id].type].produces;
+        machine.output = outputFor(level, design.devices[id].type);
         machine.active = null;
         machine.remaining = 0;
         machine.status = "ready";
@@ -318,15 +354,17 @@ function tick(state, design, delta) {
 
   for (const line of Object.values(state.lines)) {
     if (line.item?.status === "moving" && line.item.progress >= 1 - 1e-9) {
-      deliverToTarget(state, design, line);
+      deliverToTarget(state, design, level, line);
       if (state.mode === "success") return;
     }
   }
 
-  if (state.source.output) {
-    trySend(state, design, findSourceId(design), state.source.output, () => {
-      state.source.output = null;
-    });
+  for (const [id, source] of Object.entries(state.sources)) {
+    if (source.output) {
+      trySend(state, design, id, source.output, () => {
+        source.output = null;
+      });
+    }
   }
 
   for (const [id, machine] of Object.entries(state.machines)) {
@@ -339,28 +377,28 @@ function tick(state, design, delta) {
     if (!machine.active && !machine.output && machine.waiting) {
       machine.active = machine.waiting;
       machine.waiting = null;
-      machine.remaining = DEVICE_TYPES[design.devices[id].type].duration;
+      machine.remaining = level.machineDurations[design.devices[id].type];
       machine.status = "working";
     }
   }
 
-  if (state.elapsed >= LEVEL_CONFIG.duration && state.mode !== "success") {
-    state.elapsed = LEVEL_CONFIG.duration;
+  if (state.elapsed >= level.duration && state.mode !== "success") {
+    state.elapsed = level.duration;
     state.mode = "failure";
   }
 }
 
-function findSourceId(design) {
-  return Object.values(design.devices).find((device) => device.type === "source")?.id;
-}
-
-export function advanceProduction(state, design, deltaSeconds) {
+export function advanceProduction(state, design, level, deltaSeconds) {
+  if (typeof level === "number") {
+    deltaSeconds = level;
+    level = LEVEL_CONFIG;
+  }
   if (state.mode !== "running" || deltaSeconds <= 0) return state;
   const next = clone(state);
-  let remaining = Math.min(deltaSeconds, LEVEL_CONFIG.duration - next.elapsed);
+  let remaining = Math.min(deltaSeconds, level.duration - next.elapsed);
   while (remaining > 1e-9 && next.mode === "running") {
-    const delta = Math.min(LEVEL_CONFIG.step, remaining);
-    tick(next, design, delta);
+    const delta = Math.min(level.step, remaining);
+    tick(next, design, level, delta);
     remaining -= delta;
   }
   return next;

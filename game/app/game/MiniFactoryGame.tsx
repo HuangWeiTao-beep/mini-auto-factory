@@ -20,6 +20,7 @@ import {
 } from "./factory-model.mjs";
 import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
 import { snapToGrid } from "./factory-grid.mjs";
+import { getPlayerFeedback } from "./feedback-policy.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -60,6 +61,8 @@ export function MiniFactoryGame() {
   const completion = (state.completed / level.target) * 100;
   const settlementOpen = state.mode === "success" || state.mode === "failure";
   const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
+  const visibleWarning = state.mode === "running" && Boolean(state.warning);
+  const playerFeedback = getPlayerFeedback(state.mode, state.warning, toast);
 
   const markEdited = useCallback(() => {
     if (state.mode === "paused") setEditedWhilePaused(true);
@@ -311,9 +314,9 @@ export function MiniFactoryGame() {
             onConnect={finishConnection}
             onRemoveConnection={(id) => mutateDesign((current) => removeConnection(current, id))}
           />
-          <div className={`feedback-bar ${state.warning ? "feedback-bar--warning" : ""}`} role="status" aria-live="polite">
-            <span>{state.warning ? "!" : state.mode === "running" ? "▶" : "i"}</span>
-            <p>{state.warning ?? toast}</p>
+          <div className={`feedback-bar ${visibleWarning ? "feedback-bar--warning" : ""}`} role="status" aria-live="polite">
+            <span>{visibleWarning ? "!" : state.mode === "running" ? "▶" : "i"}</span>
+            <p>{playerFeedback}</p>
             <small>{locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${remainingDevices} 台设备`}</small>
           </div>
         </section>

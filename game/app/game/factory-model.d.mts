@@ -35,6 +35,7 @@ export interface Connection {
   id: string;
   from: string;
   to: string;
+  branchIndex: number;
 }
 
 export interface FactoryDesign {
@@ -65,6 +66,7 @@ export interface ProductionState {
     output: MaterialType | null;
     warning: string | null;
   }>;
+  routingCursor: Record<string, number>;
   lines: Record<string, LineState>;
   warning: string | null;
 }
@@ -81,8 +83,9 @@ export function nextUnlockedLevel(unlockedLevel: number, completedLevelId: numbe
 export function createEmptyDesign(): FactoryDesign;
 export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y: number, id?: string): FactoryDesign;
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;
-export function connectDevices(design: FactoryDesign, from: string, to: string): FactoryDesign;
+export function connectDevices(design: FactoryDesign, from: string, to: string, level?: LevelConfig): FactoryDesign;
 export function removeConnection(design: FactoryDesign, connectionId: string): FactoryDesign;
+export function outgoing(design: FactoryDesign, deviceId: string): Connection[];
 export function createProductionState(design: FactoryDesign, level: LevelConfig): ProductionState;
 export function startProduction(state: ProductionState, options: { edited: boolean; design: FactoryDesign; level: LevelConfig }): ProductionState;
 export function pauseProduction(state: ProductionState): ProductionState;

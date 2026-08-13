@@ -61,6 +61,24 @@ function simulateAtLevel(design, level, seconds) {
   );
 }
 
+function createLevelThreeDesign(branchCount) {
+  let design = createEmptyDesign();
+  design = addDevice(design, "source", 80, 180, "source");
+  design = addDevice(design, "exit", 920, 180, "exit");
+
+  for (const suffix of ["a", "b"].slice(0, branchCount)) {
+    design = addDevice(design, "cutter", 290, 180, `cutter-${suffix}`);
+    design = addDevice(design, "lathe", 500, 180, `lathe-${suffix}`);
+    design = addDevice(design, "drill", 710, 180, `drill-${suffix}`);
+    design = connectDevices(design, "source", `cutter-${suffix}`, LEVELS[3]);
+    design = connectDevices(design, `cutter-${suffix}`, `lathe-${suffix}`, LEVELS[3]);
+    design = connectDevices(design, `lathe-${suffix}`, `drill-${suffix}`, LEVELS[3]);
+    design = connectDevices(design, `drill-${suffix}`, "exit", LEVELS[3]);
+  }
+
+  return design;
+}
+
 test("level helpers expose limits and unlock only the next chapter level", () => {
   assert.equal(getLevelConfig(4), LEVELS[4]);
   assert.equal(getDeviceLimit(LEVELS[3], "lathe"), 2);
@@ -126,6 +144,61 @@ test("connection rules reject reused ports and self connections", () => {
   assert.deepEqual(unchangedOutput, design);
   assert.deepEqual(unchangedInput, design);
   assert.deepEqual(unchangedSelf, design);
+});
+
+test("level three permits a second outgoing branch and assigns branch indexes", () => {
+  let design = createDesign(["source", "cutter", "lathe"]);
+  design = connectDevices(design, "source", "cutter", LEVELS[3]);
+  design = connectDevices(design, "source", "lathe", LEVELS[3]);
+  const duplicate = connectDevices(design, "source", "cutter", LEVELS[3]);
+
+  assert.deepEqual(
+    design.connections.map(({ from, to, branchIndex }) => ({ from, to, branchIndex })),
+    [
+      { from: "source", to: "cutter", branchIndex: 0 },
+      { from: "source", to: "lathe", branchIndex: 1 },
+    ],
+  );
+  assert.equal(duplicate, design);
+});
+
+test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {
+  const design = createLevelThreeDesign(2);
+  const running = startProduction(createProductionState(design, LEVELS[3]), {
+    edited: false,
+    design,
+    level: LEVELS[3],
+  });
+
+  const afterA = advanceProduction(running, design, LEVELS[3], 1);
+  assert.equal(afterA.lines["source->cutter-a"].item?.status, "moving");
+  assert.equal(afterA.routingCursor.source, 1);
+
+  const afterB = advanceProduction(afterA, design, LEVELS[3], 1);
+  assert.equal(afterB.lines["source->cutter-b"].item?.status, "moving");
+  assert.equal(afterB.routingCursor.source, 0);
+
+  const blocked = createProductionState(design, LEVELS[3]);
+  blocked.mode = "running";
+  blocked.sources.source.output = "rod";
+  blocked.lines["source->cutter-a"].item = {
+    kind: "rod",
+    progress: 0,
+    status: "moving",
+  };
+  const held = advanceProduction(blocked, design, LEVELS[3], 0.01);
+  assert.equal(held.sources.source.output, "rod");
+  assert.equal(held.lines["source->cutter-b"].item, null);
+  assert.equal(held.routingCursor.source, 0);
+});
+
+test("a single level-three branch cannot reach twelve bolts by 27 seconds, while two branches can", () => {
+  const singleBranch = simulateAtLevel(createLevelThreeDesign(1), LEVELS[3], 27);
+  const twoBranches = simulateAtLevel(createLevelThreeDesign(2), LEVELS[3], 27);
+
+  assert.notEqual(singleBranch.mode, "success");
+  assert.equal(twoBranches.mode, "success");
+  assert.ok(twoBranches.elapsed <= 27);
 });
 
 test("pause freezes production and editing makes the next start a clean attempt", () => {

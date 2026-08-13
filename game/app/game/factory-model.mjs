@@ -156,18 +156,34 @@ export function moveDevice(design, id, x, y) {
   };
 }
 
-export function connectDevices(design, from, to) {
+function allowsParallelConnections(level) {
+  return level.id === 3 || level.id === 5;
+}
+
+export function connectDevices(design, from, to, level = LEVEL_CONFIG) {
   const source = design.devices[from];
   const target = design.devices[to];
   if (!source || !target || from === to) return design;
   if (source.type === "exit" || target.type === "source") return design;
-  if (design.connections.some((connection) => connection.from === from)) return design;
-  if (design.connections.some((connection) => connection.to === to)) return design;
+  if (
+    design.connections.some(
+      (connection) => connection.from === from && connection.to === to,
+    )
+  ) {
+    return design;
+  }
+  if (!allowsParallelConnections(level)) {
+    if (design.connections.some((connection) => connection.from === from)) return design;
+    if (design.connections.some((connection) => connection.to === to)) return design;
+  }
+  const branchIndex = design.connections.filter(
+    (connection) => connection.from === from,
+  ).length;
   return {
     ...design,
     connections: [
       ...design.connections,
-      { id: `${from}->${to}`, from, to },
+      { id: `${from}->${to}`, from, to, branchIndex },
     ],
   };
 }
@@ -211,6 +227,9 @@ export function createProductionState(design, _level = LEVEL_CONFIG) {
     completed: 0,
     sources,
     machines,
+    routingCursor: Object.fromEntries(
+      [...Object.keys(sources), ...Object.keys(machines)].map((id) => [id, 0]),
+    ),
     lines,
     warning: null,
   };
@@ -234,8 +253,19 @@ export function pauseProduction(state) {
   return state.mode === "running" ? { ...state, mode: "paused" } : state;
 }
 
-function outgoing(design, deviceId) {
-  return design.connections.find((connection) => connection.from === deviceId);
+export function outgoing(design, deviceId) {
+  return design.connections
+    .filter((connection) => connection.from === deviceId)
+    .sort((a, b) => a.branchIndex - b.branchIndex);
+}
+
+function selectOutgoingLine(state, design, deviceId) {
+  const connections = outgoing(design, deviceId);
+  if (connections.length === 0) return null;
+  const cursor = state.routingCursor[deviceId] ?? 0;
+  const connection = connections[cursor % connections.length];
+  const line = state.lines[connection.id];
+  return line && !line.item ? connection : null;
 }
 
 function deliverToTarget(state, design, level, line) {
@@ -290,12 +320,14 @@ function deliverToTarget(state, design, level, line) {
 }
 
 function trySend(state, design, deviceId, kind, clearOutput) {
-  const connection = outgoing(design, deviceId);
+  const connection = selectOutgoingLine(state, design, deviceId);
   if (!connection) return false;
   const line = state.lines[connection.id];
-  if (!line || line.item) return false;
   line.item = { kind, progress: 0, status: "moving" };
   clearOutput();
+  const connections = outgoing(design, deviceId);
+  state.routingCursor[deviceId] =
+    ((state.routingCursor[deviceId] ?? 0) + 1) % connections.length;
   return true;
 }
 
@@ -352,7 +384,10 @@ function tick(state, design, level, delta) {
   }
 
   for (const line of Object.values(state.lines)) {
-    if (line.item?.status === "moving" && line.item.progress >= 1 - 1e-9) {
+    if (
+      (line.item?.status === "moving" && line.item.progress >= 1 - 1e-9) ||
+      line.item?.status === "waiting"
+    ) {
       deliverToTarget(state, design, level, line);
       if (state.mode === "success") return;
     }

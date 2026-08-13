@@ -1,6 +1,7 @@
 import type { DragEvent, RefObject } from "react";
-import { MATERIALS } from "./factory-model.mjs";
-import type { FactoryDesign, LevelConfig, ProductionState } from "./factory-model.mjs";
+import { MATERIALS, getTransportDuration } from "./factory-model.mjs";
+import type { FactoryDesign, GridCell, LevelConfig, ProductionState } from "./factory-model.mjs";
+import { GRID } from "./factory-grid.mjs";
 import { MachineCard } from "./MachineCard";
 
 type Props = {
@@ -22,6 +23,13 @@ const size = { width: 178, height: 154 };
 function curve(fromX: number, fromY: number, toX: number, toY: number) {
   const bend = Math.max(54, Math.abs(toX - fromX) * 0.45);
   return `M ${fromX} ${fromY} C ${fromX + bend} ${fromY}, ${toX - bend} ${toY}, ${toX} ${toY}`;
+}
+
+function gridStyle(cell: GridCell) {
+  return {
+    left: cell.gridX * GRID.cellSize,
+    top: cell.gridY * GRID.cellSize,
+  };
 }
 
 export function FactoryFloor({
@@ -47,6 +55,16 @@ export function FactoryFloor({
       onDrop={onDrop}
     >
       <div className="floor-grid" aria-hidden="true" />
+      {level.obstacles.map((cell) => (
+        <div
+          key={`${cell.gridX}-${cell.gridY}`}
+          className="floor-obstacle"
+          style={gridStyle(cell)}
+          title={`障碍工位（${cell.gridX}, ${cell.gridY}）`}
+        >
+          <span>障碍</span>
+        </div>
+      ))}
       <div className="floor-label"><span>ASSEMBLY FLOOR {String(level.id).padStart(2, "0")}</span><b>设备 {Object.keys(design.devices).length}/{deviceCapacity}</b></div>
       {Object.keys(design.devices).length === 0 && (
         <div className="floor-empty">
@@ -72,13 +90,34 @@ export function FactoryFloor({
           const x2 = to.x;
           const y2 = to.y + 80;
           const d = curve(x1, y1, x2, y2);
+          const labelX = (x1 + x2) / 2;
+          const labelY = (y1 + y2) / 2;
+          const transportDuration = line?.item?.transportDuration
+            ?? getTransportDuration(level, from, to);
+          const showsBranchLabel = level.id === 3 || level.id === 5;
           return (
             <g key={connection.id}>
               <path className="connection-hit" d={d} onClick={() => !locked && onRemoveConnection(connection.id)} />
               <path className="connection" d={d} markerEnd="url(#arrow)" />
+              {showsBranchLabel && connection.branchIndex != null && (
+                <g className="connection-branch-label" transform={`translate(${labelX} ${labelY - 13})`}>
+                  <circle r="11" />
+                  <text className="connection-branch" textAnchor="middle" dominantBaseline="central">
+                    {String.fromCharCode(65 + connection.branchIndex)}
+                  </text>
+                </g>
+              )}
+              {level.transportMode === "distance" && (
+                <g className="connection-duration-label" transform={`translate(${labelX} ${labelY + 15})`}>
+                  <rect x="-23" y="-9" width="46" height="18" rx="3" />
+                  <text className="connection-duration" textAnchor="middle" dominantBaseline="central">
+                    {transportDuration.toFixed(1)}s
+                  </text>
+                </g>
+              )}
               {line?.item && (
                 <circle className={`material-dot material-dot--${line.item.kind} material-dot--${line.item.status}`} r="11">
-                  <animateMotion dur="0.5s" fill="freeze" keyPoints={`${line.item.progress};1`} keyTimes="0;1" calcMode="linear" path={d} />
+                  <animateMotion dur={`${line.item.transportDuration}s`} fill="freeze" keyPoints={`${line.item.progress};1`} keyTimes="0;1" calcMode="linear" path={d} />
                   <title>{MATERIALS[line.item.kind].label}</title>
                 </circle>
               )}

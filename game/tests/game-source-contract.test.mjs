@@ -48,3 +48,23 @@ test("the interaction layer includes drag, connection, warning and settlement fl
   assert.match(machine, /输入端口/);
   assert.match(machine, /输出端口/);
 });
+
+test("the floor source renders obstacles, branch labels and transport duration", async () => {
+  const floor = await readFile(
+    new URL("../app/game/FactoryFloor.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(floor, /obstacles/);
+  assert.match(floor, /branchIndex/);
+  assert.match(floor, /transportDuration/);
+});
+
+test("the feedback bar distinguishes quality, blocked targets and routing waits", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(game, /质量拒收/);
+  assert.match(game, /目标设备阻塞/);
+  assert.match(game, /分支 .* 正在等待/);
+});

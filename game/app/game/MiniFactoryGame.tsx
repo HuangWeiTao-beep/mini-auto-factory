@@ -14,6 +14,7 @@ import {
   getDeviceLimit,
   moveDevice,
   nextUnlockedLevel,
+  outgoing,
   pauseProduction,
   removeConnection,
   startProduction,
@@ -61,8 +62,48 @@ export function MiniFactoryGame() {
   const completion = (state.completed / level.target) * 100;
   const settlementOpen = state.mode === "success" || state.mode === "failure";
   const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
-  const visibleWarning = state.mode === "running" && Boolean(state.warning);
-  const playerFeedback = getPlayerFeedback(state.mode, state.warning, toast);
+  const blockedLine = Object.values(state.lines).find(
+    (line) => line.item?.status === "blocked" || line.item?.status === "waiting",
+  );
+  const blockedTarget = blockedLine ? design.devices[blockedLine.to] : undefined;
+  const routingWaitDevice = level.id === 3 || level.id === 5
+    ? Object.values(design.devices).find((device) => {
+        const heldOutput = state.sources[device.id]?.output ?? state.machines[device.id]?.output;
+        const branches = outgoing(design, device.id);
+        if (!heldOutput || branches.length < 2) return false;
+        const selected = branches[(state.routingCursor[device.id] ?? 0) % branches.length];
+        return Boolean(state.lines[selected.id]?.item);
+      })
+    : undefined;
+  const routingBranches = routingWaitDevice ? outgoing(design, routingWaitDevice.id) : [];
+  const routingWaitConnection = routingWaitDevice
+    ? routingBranches[(state.routingCursor[routingWaitDevice.id] ?? 0) % routingBranches.length]
+    : undefined;
+  const contextualFeedback = state.warning === "缺少孔位"
+    ? { tone: "warning", message: "质量拒收：螺栓缺少孔位，已在出口丢弃；请接入钻孔机。" }
+    : blockedLine
+      ? {
+          tone: blockedLine.item?.status === "blocked" ? "warning" : "wait",
+          message: blockedLine.item?.status === "blocked"
+            ? `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 无法接收当前物料。${state.warning ?? "请检查前置工序。"}`
+            : `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 的加工位与等待位已满，物料停在线上。`,
+        }
+      : state.warning
+        ? { tone: "warning", message: `目标设备阻塞：${state.warning}` }
+        : routingWaitConnection
+          ? {
+              tone: "wait",
+              message: `分支 ${String.fromCharCode(65 + routingWaitConnection.branchIndex)} 正在等待：轮到的线路被占用，物料保留且不会跳过。`,
+            }
+          : null;
+  const visibleFeedback = state.mode === "running" ? contextualFeedback : null;
+  const visibleWarning = visibleFeedback?.tone === "warning";
+  const visibleWait = visibleFeedback?.tone === "wait";
+  const playerFeedback = getPlayerFeedback(
+    state.mode,
+    contextualFeedback?.message ?? state.warning,
+    toast,
+  );
 
   const markEdited = useCallback(() => {
     if (state.mode === "paused") setEditedWhilePaused(true);
@@ -314,10 +355,10 @@ export function MiniFactoryGame() {
             onConnect={finishConnection}
             onRemoveConnection={(id) => mutateDesign((current) => removeConnection(current, id))}
           />
-          <div className={`feedback-bar ${visibleWarning ? "feedback-bar--warning" : ""}`} role="status" aria-live="polite">
-            <span>{visibleWarning ? "!" : state.mode === "running" ? "▶" : "i"}</span>
+          <div className={`feedback-bar ${visibleWarning ? "feedback-bar--warning" : visibleWait ? "feedback-bar--wait" : ""}`} role="status" aria-live="polite">
+            <span>{visibleWarning ? "!" : visibleWait ? "Ⅱ" : state.mode === "running" ? "▶" : "i"}</span>
             <p>{playerFeedback}</p>
-            <small>{locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${remainingDevices} 台设备`}</small>
+            <small>{visibleWait ? "线路等待" : locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${remainingDevices} 台设备`}</small>
           </div>
         </section>
       </div>

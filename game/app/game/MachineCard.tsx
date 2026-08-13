@@ -14,6 +14,14 @@ type Props = {
 };
 
 const icons = { source: "▰", cutter: "✂", lathe: "⚙", drill: "◉", exit: "✓" } as const;
+const statusLabels: Record<string, string> = {
+  idle: "待机",
+  working: "加工中",
+  ready: "出料就绪",
+  waiting: "等待中",
+  blocked: "已阻塞",
+  warning: "工序警告",
+};
 
 function materialLabel(kind: MaterialType | null | undefined) {
   return kind ? MATERIALS[kind].shortLabel : "空";
@@ -45,6 +53,16 @@ export function MachineCard({
   const isSource = device.type === "source";
   const source = isSource ? state.sources[device.id] : undefined;
   const status = machine?.status ?? ((source?.pulse ?? 0) > 0 ? "working" : "idle");
+  const incomingBlocked = Object.values(state.lines).some(
+    (line) => line.to === device.id && (line.item?.status === "waiting" || line.item?.status === "blocked"),
+  );
+  const visualStatus = status === "warning"
+    ? "warning"
+    : incomingBlocked || machine?.output
+      ? "blocked"
+      : source?.output || machine?.waiting
+        ? "waiting"
+        : status;
   const hasInput = device.type !== "source";
   const hasOutput = device.type !== "exit";
   const processingDuration = device.type === "cutter" || device.type === "lathe" || device.type === "drill"
@@ -61,11 +79,11 @@ export function MachineCard({
 
   return (
     <article
-      className={`machine machine--${device.type} machine--${status}`}
+      className={`machine machine--${device.type} machine--${visualStatus}`}
       style={{ left: device.x, top: device.y }}
       draggable={!locked}
       onDragStart={(event) => onDragStart(event, device.id)}
-      aria-label={`${spec.label}，${status === "working" ? "加工中" : status === "warning" ? "警告" : "待机"}`}
+      aria-label={`${spec.label}，${statusLabels[visualStatus] ?? "待机"}`}
     >
       {hasInput && (
         <button
@@ -79,7 +97,10 @@ export function MachineCard({
 
       <div className="machine__topline">
         <span className="machine__index">{device.id.slice(-2).toUpperCase()}</span>
-        <span className={`machine__lamp machine__lamp--${status}`} />
+        <span className="machine__state">
+          <em>{statusLabels[visualStatus] ?? "待机"}</em>
+          <span className={`machine__lamp machine__lamp--${visualStatus}`} />
+        </span>
       </div>
       <div className="machine__icon" aria-hidden="true">{icons[device.type]}</div>
       <div>

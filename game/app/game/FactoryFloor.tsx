@@ -85,10 +85,10 @@ export function FactoryFloor({
           const to = design.devices[connection.to];
           const line = state.lines[connection.id];
           if (!from || !to) return null;
-          const x1 = from.x + size.width;
-          const y1 = from.y + 80;
-          const x2 = to.x;
-          const y2 = to.y + 80;
+          const x1 = from.gridX * GRID.cellSize + size.width;
+          const y1 = from.gridY * GRID.cellSize + 80;
+          const x2 = to.gridX * GRID.cellSize;
+          const y2 = to.gridY * GRID.cellSize + 80;
           const d = curve(x1, y1, x2, y2);
           const labelX = (x1 + x2) / 2;
           const labelY = (y1 + y2) / 2;

@@ -68,3 +68,40 @@ test("the feedback bar distinguishes quality, blocked targets and routing waits"
   assert.match(game, /目标设备阻塞/);
   assert.match(game, /分支 .* 正在等待/);
 });
+
+test("obstacles stay above overlapping adjacent machine footprints", async () => {
+  const styles = await readFile(
+    new URL("../app/game/game.css", import.meta.url),
+    "utf8",
+  );
+  const obstacleRule = styles.match(/\.floor-obstacle\s*\{([^}]*)\}/)?.[1] ?? "";
+  const machineRule = styles.match(/\.machine\s*\{([^}]*)\}/)?.[1] ?? "";
+  const obstacleZ = Number(obstacleRule.match(/z-index:\s*(\d+)/)?.[1]);
+  const machineZ = Number(machineRule.match(/z-index:\s*(\d+)/)?.[1]);
+
+  assert.equal(Number.isFinite(obstacleZ), true);
+  assert.equal(Number.isFinite(machineZ), true);
+  assert.equal(obstacleZ > machineZ, true);
+});
+
+test("machine cards use snapped grid coordinates for their visual position", async () => {
+  const machine = await readFile(
+    new URL("../app/game/MachineCard.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(machine, /left:\s*device\.gridX\s*\*\s*GRID\.cellSize/);
+  assert.match(machine, /top:\s*device\.gridY\s*\*\s*GRID\.cellSize/);
+  assert.doesNotMatch(machine, /left:\s*device\.x|top:\s*device\.y/);
+});
+
+test("connection ports and labels share the snapped machine geometry", async () => {
+  const floor = await readFile(
+    new URL("../app/game/FactoryFloor.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(floor, /from\.gridX\s*\*\s*GRID\.cellSize/);
+  assert.match(floor, /from\.gridY\s*\*\s*GRID\.cellSize/);
+  assert.match(floor, /to\.gridX\s*\*\s*GRID\.cellSize/);
+  assert.match(floor, /to\.gridY\s*\*\s*GRID\.cellSize/);
+  assert.doesNotMatch(floor, /from\.x|from\.y|to\.x|to\.y/);
+});

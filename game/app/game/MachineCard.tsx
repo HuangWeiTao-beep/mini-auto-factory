@@ -1,6 +1,7 @@
 import type { DragEvent, MouseEvent } from "react";
 import { DEVICE_TYPES, MATERIALS } from "./factory-model.mjs";
 import type { Device, LevelConfig, MaterialType, ProductionState } from "./factory-model.mjs";
+import { GRID } from "./factory-grid.mjs";
 
 type Props = {
   device: Device;
@@ -80,7 +81,10 @@ export function MachineCard({
   return (
     <article
       className={`machine machine--${device.type} machine--${visualStatus}`}
-      style={{ left: device.x, top: device.y }}
+      style={{
+        left: device.gridX * GRID.cellSize,
+        top: device.gridY * GRID.cellSize,
+      }}
       draggable={!locked}
       onDragStart={(event) => onDragStart(event, device.id)}
       aria-label={`${spec.label}，${statusLabels[visualStatus] ?? "待机"}`}

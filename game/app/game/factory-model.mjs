@@ -317,7 +317,7 @@ function tick(state, design, delta) {
   }
 
   for (const line of Object.values(state.lines)) {
-    if (line.item?.status === "moving" && line.item.progress >= 1) {
+    if (line.item?.status === "moving" && line.item.progress >= 1 - 1e-9) {
       deliverToTarget(state, design, line);
       if (state.mode === "success") return;
     }

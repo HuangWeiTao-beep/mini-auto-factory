@@ -46,11 +46,11 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(nextUnlockedLevel(5, 5), 5);
 });
 
-test("the correct line completes ten bolts before sixty seconds", () => {
-  const state = simulate(createCorrectDesign(), 36.7);
+test("the correct line completes ten bolts exactly at 36.5 seconds", () => {
+  const state = simulate(createCorrectDesign(), 36.5);
   assert.equal(state.completed, 10);
   assert.equal(state.mode, "success");
-  assert.ok(state.elapsed >= 36 && state.elapsed < 37);
+  assert.equal(state.elapsed, 36.5);
 });
 
 test("the first bolt follows source, transport, cutting, turning and exit timing", () => {

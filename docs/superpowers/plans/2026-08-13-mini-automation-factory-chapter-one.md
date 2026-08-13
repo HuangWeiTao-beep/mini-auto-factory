@@ -305,7 +305,7 @@ line.item = {
 };
 ```
 
-Advance each item using its own launch-time transport duration. Preserve fixed 0.5-second transport in levels 1–3. Add a full level-five standard-layout simulation test proving 14 items complete in 32 seconds.
+Advance each item using its own launch-time transport duration. Preserve fixed 0.5-second transport in levels 1–3. Add a full level-five standard-layout simulation test proving 14 items complete in 40 seconds.
 
 - [ ] **Step 4: Run spatial and chapter timing tests**
 

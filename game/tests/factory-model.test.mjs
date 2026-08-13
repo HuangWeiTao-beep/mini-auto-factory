@@ -135,6 +135,7 @@ test("levels three and five expose exactly one fast source", () => {
 
 test("level five exposes the workshop acceptance display name", () => {
   assert.equal(getLevelConfig(5).name, "工坊验收");
+  assert.equal(getLevelConfig(5).duration, 40);
 });
 
 test("success unlocks the next level while completing level five keeps the chapter capped", () => {
@@ -331,7 +332,7 @@ test("a launched level-four item keeps its original transport duration after dev
   );
 });
 
-test("a compact level-five layout fans one source into two branches and completes fourteen bolts within thirty-two seconds", () => {
+test("a compact level-five layout fans one source into two branches and completes fourteen bolts within forty seconds", () => {
   const design = createCompactLevelFiveDesign();
   const sources = Object.values(design.devices).filter(({ type }) => type === "source");
 
@@ -342,7 +343,7 @@ test("a compact level-five layout fans one source into two branches and complete
 
   assert.equal(state.completed, 14);
   assert.equal(state.mode, "success");
-  assert.ok(state.elapsed <= 32);
+  assert.ok(state.elapsed <= 40);
 });
 
 test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {

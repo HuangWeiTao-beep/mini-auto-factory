@@ -1,10 +1,11 @@
 import type { DragEvent, MouseEvent } from "react";
 import { DEVICE_TYPES, MATERIALS } from "./factory-model.mjs";
-import type { Device, MaterialType, ProductionState } from "./factory-model.mjs";
+import type { Device, LevelConfig, MaterialType, ProductionState } from "./factory-model.mjs";
 
 type Props = {
   device: Device;
   state: ProductionState;
+  level: LevelConfig;
   locked: boolean;
   isConnecting: boolean;
   onStartConnection: (id: string) => void;
@@ -18,9 +19,21 @@ function materialLabel(kind: MaterialType | null | undefined) {
   return kind ? MATERIALS[kind].shortLabel : "空";
 }
 
+function machineDescription(device: Device, level: LevelConfig) {
+  if (device.type === "source") return `${level.sourceInterval.toFixed(1)} 秒 / 根`;
+  if (device.type === "cutter") return `长钢棒 → 短料 · ${level.machineDurations.cutter.toFixed(1)} 秒`;
+  if (device.type === "lathe") {
+    const output = level.id === 1 ? "螺栓" : "未钻孔螺栓";
+    return `短料 → ${output} · ${level.machineDurations.lathe.toFixed(1)} 秒`;
+  }
+  if (device.type === "drill") return `未钻孔螺栓 → 螺栓 · ${level.machineDurations.drill.toFixed(1)} 秒`;
+  return "合格品计数";
+}
+
 export function MachineCard({
   device,
   state,
+  level,
   locked,
   isConnecting,
   onStartConnection,
@@ -34,8 +47,11 @@ export function MachineCard({
   const status = machine?.status ?? ((source?.pulse ?? 0) > 0 ? "working" : "idle");
   const hasInput = device.type !== "source";
   const hasOutput = device.type !== "exit";
+  const processingDuration = device.type === "cutter" || device.type === "lathe" || device.type === "drill"
+    ? level.machineDurations[device.type]
+    : spec.duration;
   const progress = machine?.active
-    ? Math.max(0, 1 - machine.remaining / spec.duration)
+    ? Math.max(0, 1 - machine.remaining / processingDuration)
     : 0;
 
   const finishConnection = (event: MouseEvent<HTMLButtonElement>) => {
@@ -68,13 +84,7 @@ export function MachineCard({
       <div className="machine__icon" aria-hidden="true">{icons[device.type]}</div>
       <div>
         <strong>{spec.label}</strong>
-        <small>
-          {device.type === "source" && "3.0 秒 / 根"}
-          {device.type === "cutter" && "长钢棒 → 短料 · 2.0 秒"}
-          {device.type === "lathe" && "短料 → 螺栓 · 3.0 秒"}
-          {device.type === "drill" && "未钻孔螺栓 → 螺栓 · 2.0 秒"}
-          {device.type === "exit" && "合格品计数"}
-        </small>
+        <small>{machineDescription(device, level)}</small>
       </div>
 
       {machine && (

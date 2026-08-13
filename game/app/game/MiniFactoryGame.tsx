@@ -4,45 +4,62 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import {
   DEVICE_TYPES,
-  LEVEL_CONFIG,
+  LEVELS,
   addDevice,
   advanceProduction,
+  canPlaceDevice,
   connectDevices,
   createEmptyDesign,
   createProductionState,
+  getDeviceLimit,
   moveDevice,
+  nextUnlockedLevel,
   pauseProduction,
   removeConnection,
   startProduction,
 } from "./factory-model.mjs";
 import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
+import { snapToGrid } from "./factory-grid.mjs";
 import { FactoryFloor } from "./FactoryFloor";
+import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
 
-const palette: Array<{ type: DeviceType; icon: string; eyebrow: string; detail: string }> = [
-  { type: "source", icon: "▰", eyebrow: "RAW 01 · 钢棒源", detail: "每 3 秒生成长钢棒" },
-  { type: "cutter", icon: "✂", eyebrow: "CUT 02 · 切割机", detail: "2 秒 · 钢棒变短料" },
-  { type: "lathe", icon: "⚙", eyebrow: "TURN 03 · 车削机", detail: "3 秒 · 短料变螺栓" },
-  { type: "exit", icon: "✓", eyebrow: "QC 04 · 成品出口", detail: "即时接收合格螺栓" },
+const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: string }> = [
+  { type: "source", icon: "▰", eyebrow: "RAW 01 · 钢棒源" },
+  { type: "cutter", icon: "✂", eyebrow: "CUT 02 · 切割机" },
+  { type: "lathe", icon: "⚙", eyebrow: "TURN 03 · 车削机" },
+  { type: "drill", icon: "◉", eyebrow: "DRILL 04 · 钻孔机" },
+  { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
 ];
 
 const starterDesign = () => createEmptyDesign();
 
 export function MiniFactoryGame() {
+  const [activeLevelId, setActiveLevelId] = useState(1);
+  const [unlockedLevel, setUnlockedLevel] = useState(1);
   const [design, setDesign] = useState<FactoryDesign>(starterDesign);
-  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign(), LEVEL_CONFIG));
+  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign(), LEVELS[1]));
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
+  const [showLevelSelect, setShowLevelSelect] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
-  const [toast, setToast] = useState("把四台设备拖进画布，按工序顺序连起来。");
+  const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
   const previousTime = useRef<number | null>(null);
   const designRef = useRef(design);
+  const stateRef = useRef(state);
 
+  const level = LEVELS[activeLevelId];
+  const palette = paletteDefinitions
+    .filter((item) => getDeviceLimit(level, item.type) > 0)
+    .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
+  const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
   const locked = state.mode === "running";
-  const remaining = Math.max(0, LEVEL_CONFIG.duration - state.elapsed);
-  const completion = (state.completed / LEVEL_CONFIG.target) * 100;
+  const remaining = Math.max(0, level.duration - state.elapsed);
+  const completion = (state.completed / level.target) * 100;
+  const settlementOpen = state.mode === "success" || state.mode === "failure";
+  const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
 
   const markEdited = useCallback(() => {
     if (state.mode === "paused") setEditedWhilePaused(true);
@@ -52,16 +69,20 @@ export function MiniFactoryGame() {
     setDesign((current) => {
       const next = mutation(current);
       if (next !== current && state.mode !== "paused") {
-        setState(createProductionState(next, LEVEL_CONFIG));
+        setState(createProductionState(next, level));
       }
       return next;
     });
     markEdited();
-  }, [markEdited, state.mode]);
+  }, [level, markEdited, state.mode]);
 
   useEffect(() => {
     designRef.current = design;
   }, [design]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
@@ -81,14 +102,20 @@ export function MiniFactoryGame() {
       const previous = previousTime.current ?? time;
       previousTime.current = time;
       const delta = Math.min(0.1, (time - previous) / 1000);
-      setState((current) => advanceProduction(current, designRef.current, LEVEL_CONFIG, delta));
+      const current = stateRef.current;
+      const next = advanceProduction(current, designRef.current, level, delta);
+      stateRef.current = next;
+      setState(next);
+      if (current.mode !== "success" && next.mode === "success") {
+        setUnlockedLevel((unlocked) => nextUnlockedLevel(unlocked, level.id));
+      }
       frameRef.current = requestAnimationFrame(loop);
     };
     frameRef.current = requestAnimationFrame(loop);
     return () => {
       if (frameRef.current) cancelAnimationFrame(frameRef.current);
     };
-  }, [state.mode]);
+  }, [level, state.mode]);
 
   const beginPaletteDrag = (event: DragEvent<HTMLElement>, type: DeviceType) => {
     event.dataTransfer.setData("application/x-factory-palette", type);
@@ -106,24 +133,35 @@ export function MiniFactoryGame() {
     const bounds = floorRef.current.getBoundingClientRect();
     const x = Math.max(10, Math.min(bounds.width - 188, event.clientX - bounds.left - 89));
     const y = Math.max(54, Math.min(bounds.height - 166, event.clientY - bounds.top - 77));
+    const cell = snapToGrid(x, y);
     const type = event.dataTransfer.getData("application/x-factory-palette") as DeviceType;
     const id = event.dataTransfer.getData("application/x-factory-device");
     if (type && DEVICE_TYPES[type]) {
-      if (Object.values(design.devices).some((device) => device.type === type)) {
-        setToast("V0.1 每类设备只提供一台。先把这条单线跑顺。 ");
+      const placedCount = Object.values(design.devices).filter((device) => device.type === type).length;
+      if (placedCount >= getDeviceLimit(level, type)) {
+        setToast(`${DEVICE_TYPES[type].label}已达到本关上限。设备不是从空气里变出来的。`);
+        return;
+      }
+      if (!canPlaceDevice(design, level, cell)) {
+        setToast("这个网格被障碍或其他设备占用，请换一格。 ");
         return;
       }
       mutateDesign((current) => addDevice(current, type, x, y));
       setToast(`${DEVICE_TYPES[type].label}已放置。`);
     } else if (id) {
+      if (!canPlaceDevice(design, level, cell, id)) {
+        setToast("这个网格被障碍或其他设备占用，设备拒绝叠罗汉。 ");
+        return;
+      }
       mutateDesign((current) => moveDevice(current, id, x, y));
+      setToast("设备位置已更新。 ");
     }
   };
 
   const finishConnection = (to: string) => {
     if (!connectingFrom || locked) return;
     const before = design;
-    const next = connectDevices(before, connectingFrom, to);
+    const next = connectDevices(before, connectingFrom, to, level);
     setConnectingFrom(null);
     if (next === before) {
       setToast("端口已经占用，或这个连接方向不成立。机器也有底线。 ");
@@ -139,7 +177,7 @@ export function MiniFactoryGame() {
       return;
     }
     setConnectingFrom(null);
-    setState((current) => startProduction(current, { edited: editedWhilePaused, design, level: LEVEL_CONFIG }));
+    setState((current) => startProduction(current, { edited: editedWhilePaused, design, level }));
     setEditedWhilePaused(false);
     setToast(editedWhilePaused ? "设计已更新，本轮生产从零开始。" : "产线启动，布局已锁定。");
   };
@@ -152,7 +190,7 @@ export function MiniFactoryGame() {
   const resetAttempt = (keepDesign: boolean) => {
     const nextDesign = keepDesign ? design : createEmptyDesign();
     setDesign(nextDesign);
-    setState(createProductionState(nextDesign, LEVEL_CONFIG));
+    setState(createProductionState(nextDesign, level));
     setConnectingFrom(null);
     setEditedWhilePaused(false);
     setToast(keepDesign ? "生产状态已清空，设备和连线为你保留。" : "画布已清空，重新设计吧。 ");
@@ -163,55 +201,95 @@ export function MiniFactoryGame() {
     [state.completed, state.elapsed],
   );
 
-  const allMachinesPlaced = Object.keys(design.devices).length === palette.length;
+  const allMachinesPlaced = Object.keys(design.devices).length === requiredDeviceCount;
+  const remainingDevices = Math.max(0, requiredDeviceCount - Object.keys(design.devices).length);
   const closeOnboarding = () => setShowOnboarding(false);
-  const openOnboarding = () => setShowOnboarding(true);
+  const openOnboarding = () => {
+    setShowLevelSelect(false);
+    setShowOnboarding(true);
+  };
+
+  const openLevelSelect = () => {
+    if (locked) return;
+    setShowOnboarding(false);
+    setShowLevelSelect(true);
+  };
+
+  const paletteDetail = (type: DeviceType) => {
+    if (type === "source") return `每 ${level.sourceInterval} 秒生成长钢棒`;
+    if (type === "cutter") return `${level.machineDurations.cutter} 秒 · 钢棒变短料`;
+    if (type === "lathe") return `${level.machineDurations.lathe} 秒 · 短料变${level.id === 1 ? "螺栓" : "未钻孔螺栓"}`;
+    if (type === "drill") return `${level.machineDurations.drill} 秒 · 钻孔成为合格螺栓`;
+    return "即时接收合格螺栓";
+  };
+
+  const selectLevel = (levelId: number) => {
+    if (!LEVELS[levelId] || levelId > unlockedLevel) {
+      setToast("这一关还锁着。先把前一关收拾明白。 ");
+      return;
+    }
+    const nextDesign = createEmptyDesign();
+    setActiveLevelId(levelId);
+    setDesign(nextDesign);
+    setState(createProductionState(nextDesign, LEVELS[levelId]));
+    setConnectingFrom(null);
+    setEditedWhilePaused(false);
+    setShowLevelSelect(false);
+    setShowOnboarding(levelId === 1);
+    setToast(`第 ${levelId} 关已载入。先摆设备，再连产线。`);
+  };
 
   return (
     <main className="factory-app">
-      <header className="app-header">
+      <header className="app-header" inert={overlayOpen ? true : undefined}>
         <div className="brand-lockup">
           <span className="brand-mark">M<span>F</span></span>
-          <div><b>迷你自动化工厂</b><small>MINI AUTOMATION FACTORY · V0.1</small></div>
+          <div><b>迷你自动化工厂</b><small>MINI AUTOMATION FACTORY · CHAPTER ONE</small></div>
         </div>
         <div className="level-title">
-          <span>教学关卡 01</span>
-          <h1>第 1 关：螺栓生产</h1>
+          <span>章节关卡 {String(activeLevelId).padStart(2, "0")}</span>
+          <h1>{`第 ${activeLevelId} 关：${level.name}`}</h1>
         </div>
         <div className="header-status">
           <span className={`status-light status-light--${state.mode}`} />
           <div><small>系统状态</small><b>{state.mode === "running" ? "生产中" : state.mode === "paused" ? "已暂停" : "设计模式"}</b></div>
-          <button className="help-control" type="button" aria-label="打开玩法说明" onClick={openOnboarding}>
-            <span aria-hidden="true">?</span>玩法
+          <button className="chapter-control" type="button" aria-label="打开关卡选择" onClick={openLevelSelect} disabled={locked}>
+            <span aria-hidden="true">⌘</span>关卡
           </button>
+          {activeLevelId === 1 && (
+            <button className="help-control" type="button" aria-label="打开玩法说明" onClick={openOnboarding}>
+              <span aria-hidden="true">?</span>玩法
+            </button>
+          )}
         </div>
       </header>
 
-      <section className="mission-strip" aria-label="关卡目标">
-        <div><span className="mission-tag">MISSION</span><p>60 秒内生产 <b>10</b> 个合格螺栓</p></div>
-        <div className="route-hint"><span>钢棒</span><i>→</i><span>切割</span><i>→</i><span>车削</span><i>→</i><span>出口</span></div>
+      <section className="mission-strip" aria-label="关卡目标" inert={overlayOpen ? true : undefined}>
+        <div><span className="mission-tag">MISSION</span><p>{`${level.duration} 秒内生产 `}<b>{level.target}</b> 个合格螺栓</p></div>
+        <div className="route-hint"><span>{level.routeHint}</span></div>
         <div className="mission-metrics">
           <div><small>剩余时间</small><strong className={remaining <= 10 ? "urgent" : ""}>{remaining.toFixed(1)}<em>s</em></strong></div>
-          <div><small>合格产出</small><strong>{state.completed}<em>/10</em></strong></div>
+          <div><small>合格产出</small><strong>{state.completed}<em>/{level.target}</em></strong></div>
         </div>
       </section>
 
-      <div className="workspace">
+      <div className="workspace" inert={overlayOpen ? true : undefined}>
         <aside className="equipment-panel">
           <div className="panel-heading"><span>设备库</span><small>拖入画布</small></div>
           <div className="equipment-list">
             {palette.map((item) => {
-              const placed = Object.values(design.devices).some((device) => device.type === item.type);
+              const placedCount = Object.values(design.devices).filter((device) => device.type === item.type).length;
+              const atLimit = placedCount >= item.limit;
               return (
                 <article
                   key={item.type}
-                  className={`palette-card ${placed ? "palette-card--placed" : ""}`}
-                  draggable={!locked && !placed}
+                  className={`palette-card ${atLimit ? "palette-card--placed" : ""}`}
+                  draggable={!locked && !atLimit}
                   onDragStart={(event) => beginPaletteDrag(event, item.type)}
                 >
                   <span className="palette-card__icon">{item.icon}</span>
-                  <div><small>{item.eyebrow}</small><b>{DEVICE_TYPES[item.type].label}</b><p>{item.detail}</p></div>
-                  <span className="palette-card__state">{placed ? "已放置" : "拖拽"}</span>
+                  <div><small>{item.eyebrow}</small><b>{DEVICE_TYPES[item.type].label}</b><p>{paletteDetail(item.type)}</p></div>
+                  <span className="palette-card__state">{atLimit ? "已放齐" : `${placedCount}/${item.limit}`}</span>
                 </article>
               );
             })}
@@ -223,6 +301,7 @@ export function MiniFactoryGame() {
           <FactoryFloor
             design={design}
             state={state}
+            level={level}
             locked={locked}
             connectingFrom={connectingFrom}
             floorRef={floorRef}
@@ -235,12 +314,12 @@ export function MiniFactoryGame() {
           <div className={`feedback-bar ${state.warning ? "feedback-bar--warning" : ""}`} role="status" aria-live="polite">
             <span>{state.warning ? "!" : state.mode === "running" ? "▶" : "i"}</span>
             <p>{state.warning ?? toast}</p>
-            <small>{locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${palette.length - Object.keys(design.devices).length} 台设备`}</small>
+            <small>{locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${remainingDevices} 台设备`}</small>
           </div>
         </section>
       </div>
 
-      <footer className="control-deck">
+      <footer className="control-deck" inert={overlayOpen ? true : undefined}>
         <div className="progress-cluster"><span>任务进度</span><div className="task-progress"><i style={{ width: `${completion}%` }} /></div><b>{Math.round(completion)}%</b></div>
         <div className="control-buttons">
           {state.mode !== "running" ? (
@@ -256,10 +335,10 @@ export function MiniFactoryGame() {
         <div className="legend"><span><i className="legend-working" />加工中</span><span><i className="legend-wait" />等待</span><span><i className="legend-error" />错误</span></div>
       </footer>
 
-      {showOnboarding && (
+      {showOnboarding && !showLevelSelect && state.mode !== "success" && state.mode !== "failure" && (
         <div className="onboarding-backdrop" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
           <section className="onboarding-card">
-            <button className="onboarding-close" type="button" aria-label="关闭玩法说明" onClick={closeOnboarding}>×</button>
+            <button className="onboarding-close" type="button" aria-label="关闭玩法说明" onClick={closeOnboarding} autoFocus>×</button>
             <span className="onboarding-kicker">START HERE</span>
             <h2 id="onboarding-title">第 1 关怎么玩</h2>
             <p>把设备摆好、接好工序，再启动这条小小的螺栓产线。</p>
@@ -274,24 +353,36 @@ export function MiniFactoryGame() {
         </div>
       )}
 
-      {(state.mode === "success" || state.mode === "failure") && (
+      {(state.mode === "success" || state.mode === "failure") && !showLevelSelect && (
         <div className="settlement-backdrop" role="dialog" aria-modal="true" aria-labelledby="settlement-title">
           <section className={`settlement-card settlement-card--${state.mode}`}>
             <span className="settlement-kicker">PRODUCTION REPORT</span>
             <div className="settlement-icon">{state.mode === "success" ? "✓" : "!"}</div>
-            <h2 id="settlement-title">{state.mode === "success" ? "生产任务完成！" : "生产任务未完成"}</h2>
-            <p>{state.mode === "success" ? "螺栓产线稳定运行，第一班顺利交付。" : "检查机器的连接顺序，确保物料经过完整加工流程。"}</p>
+            <h2 id="settlement-title">{state.mode === "success" ? `第 ${activeLevelId} 关完成！` : `第 ${activeLevelId} 关未完成`}</h2>
+            <p>{state.mode === "success" ? `${level.name}稳定运行，下一张工单可以进场了。` : `检查「${level.routeHint}」，确保物料经过完整加工流程。`}</p>
             <div className="settlement-stats">
-              <div><small>合格螺栓</small><strong>{state.completed} / 10</strong></div>
+              <div><small>合格螺栓</small><strong>{state.completed} / {level.target}</strong></div>
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>
               <div><small>平均产量</small><strong>{averageOutput} 件/分钟</strong></div>
             </div>
             <div className="settlement-actions">
-              <button onClick={() => resetAttempt(true)}>{state.mode === "success" ? "重新挑战" : "重新设计"}</button>
-              <button disabled>下一关（V0.1 未开放）</button>
+              <button className="settlement-primary" onClick={() => resetAttempt(true)} autoFocus>重新挑战</button>
+              {state.mode === "success" && activeLevelId < 5 && (
+                <button onClick={() => selectLevel(activeLevelId + 1)}>下一关</button>
+              )}
+              <button onClick={openLevelSelect}>返回关卡选择</button>
             </div>
           </section>
         </div>
+      )}
+
+      {showLevelSelect && (
+        <LevelSelectModal
+          unlockedLevel={unlockedLevel}
+          activeLevel={activeLevelId}
+          onSelect={selectLevel}
+          onClose={() => setShowLevelSelect(false)}
+        />
       )}
     </main>
   );

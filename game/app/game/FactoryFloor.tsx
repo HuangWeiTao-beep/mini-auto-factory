@@ -1,11 +1,12 @@
 import type { DragEvent, RefObject } from "react";
 import { MATERIALS } from "./factory-model.mjs";
-import type { FactoryDesign, ProductionState } from "./factory-model.mjs";
+import type { FactoryDesign, LevelConfig, ProductionState } from "./factory-model.mjs";
 import { MachineCard } from "./MachineCard";
 
 type Props = {
   design: FactoryDesign;
   state: ProductionState;
+  level: LevelConfig;
   locked: boolean;
   connectingFrom: string | null;
   floorRef: RefObject<HTMLDivElement | null>;
@@ -26,6 +27,7 @@ function curve(fromX: number, fromY: number, toX: number, toY: number) {
 export function FactoryFloor({
   design,
   state,
+  level,
   locked,
   connectingFrom,
   floorRef,
@@ -35,6 +37,8 @@ export function FactoryFloor({
   onConnect,
   onRemoveConnection,
 }: Props) {
+  const deviceCapacity = Object.values(level.deviceLimits).reduce((sum, limit) => sum + limit, 0);
+
   return (
     <div
       ref={floorRef}
@@ -43,7 +47,7 @@ export function FactoryFloor({
       onDrop={onDrop}
     >
       <div className="floor-grid" aria-hidden="true" />
-      <div className="floor-label"><span>ASSEMBLY FLOOR 01</span><b>设备 {Object.keys(design.devices).length}/4</b></div>
+      <div className="floor-label"><span>ASSEMBLY FLOOR {String(level.id).padStart(2, "0")}</span><b>设备 {Object.keys(design.devices).length}/{deviceCapacity}</b></div>
       {Object.keys(design.devices).length === 0 && (
         <div className="floor-empty">
           <span>＋</span>
@@ -88,6 +92,7 @@ export function FactoryFloor({
           key={device.id}
           device={device}
           state={state}
+          level={level}
           locked={locked}
           isConnecting={Boolean(connectingFrom)}
           onStartConnection={onStartConnection}

@@ -42,28 +42,41 @@ function isValidSaveState(value) {
   );
 }
 
-function clone(value) {
-  return structuredClone(value);
+function cloneOrNull(value) {
+  try {
+    return structuredClone(value);
+  } catch {
+    return null;
+  }
 }
 
 export function parseGameSave(raw) {
   if (typeof raw !== "string" || raw.trim() === "") return createDefaultSaveState();
   try {
     const parsed = JSON.parse(raw);
-    return isValidSaveState(parsed) ? clone(parsed) : createDefaultSaveState();
+    if (!isValidSaveState(parsed)) return createDefaultSaveState();
+    return cloneOrNull(parsed) ?? createDefaultSaveState();
   } catch {
     return createDefaultSaveState();
   }
 }
 
 export function serializeGameSave(state) {
-  return JSON.stringify(isValidSaveState(state) ? state : createDefaultSaveState());
+  if (!isValidSaveState(state)) return JSON.stringify(createDefaultSaveState());
+  try {
+    return JSON.stringify(state);
+  } catch {
+    return JSON.stringify(createDefaultSaveState());
+  }
 }
 
 function resolveStorage(storage) {
-  if (storage && typeof storage.getItem === "function") return storage;
-  if (typeof globalThis.localStorage !== "undefined") return globalThis.localStorage;
-  return null;
+  try {
+    const candidate = storage ?? globalThis.localStorage;
+    return candidate && typeof candidate.getItem === "function" ? candidate : null;
+  } catch {
+    return null;
+  }
 }
 
 export function loadGameSave(storage, key = SAVE_STORAGE_KEY) {
@@ -78,18 +91,27 @@ export function loadGameSave(storage, key = SAVE_STORAGE_KEY) {
 
 export function saveGameSave(storage, state, key = SAVE_STORAGE_KEY) {
   const target = resolveStorage(storage);
-  const next = isValidSaveState(state) ? clone(state) : createDefaultSaveState();
-  if (target && typeof target.setItem === "function") {
-    try { target.setItem(key, JSON.stringify(next)); } catch { /* storage may be unavailable */ }
+  if (!isValidSaveState(state)) return createDefaultSaveState();
+  const next = cloneOrNull(state);
+  if (!next) return createDefaultSaveState();
+  let serialized;
+  try {
+    serialized = JSON.stringify(next);
+  } catch {
+    // Invalid data or unavailable storage must not replace an existing save.
+    return createDefaultSaveState();
   }
+  try {
+    if (target && typeof target.setItem === "function") target.setItem(key, serialized);
+  } catch { /* storage may be unavailable */ }
   return next;
 }
 
 export function clearGameSave(storage, key = SAVE_STORAGE_KEY) {
   const target = resolveStorage(storage);
-  if (target && typeof target.removeItem === "function") {
-    try { target.removeItem(key); } catch { /* storage may be unavailable */ }
-  }
+  try {
+    if (target && typeof target.removeItem === "function") target.removeItem(key);
+  } catch { /* storage may be unavailable */ }
   return createDefaultSaveState();
 }
 

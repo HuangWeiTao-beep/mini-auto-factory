@@ -22,3 +22,15 @@
 ## 范围
 
 未修改 `MiniFactoryGame.tsx` 或 B2–B4 UI 接入代码。
+
+## 审查修复
+
+- 存储对象、`localStorage` getter 以及 `getItem`/`setItem`/`removeItem` 方法均在安全边界内探测和调用；受限环境不会抛出异常。
+- 对 `structuredClone` 与 `JSON.stringify` 增加异常回退；不可克隆/不可序列化的草稿不会写入，也不会覆盖已有有效存档。
+- 新增测试覆盖存储 getter/方法抛错、循环草稿和有效存档保持不变。
+
+本轮验证：
+
+- `node --test tests/game-save.test.mjs`：6/6 通过。
+- `npm test`：56/56 通过，构建成功。
+- `npm run lint`：0 errors、0 warnings。

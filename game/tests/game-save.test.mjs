@@ -73,3 +73,47 @@ test("clearing a save removes progress and returns a fresh default object", () =
   assert.deepEqual(clearGameSave(storage), DEFAULT_SAVE_STATE);
   assert.deepEqual(loadGameSave(storage), DEFAULT_SAVE_STATE);
 });
+
+test("storage getters and methods throwing never escape the save boundary", () => {
+  const throwingStorage = {};
+  Object.defineProperty(throwingStorage, "getItem", { get() { throw new Error("private mode"); } });
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, get() { throw new Error("blocked"); } });
+  try {
+    assert.deepEqual(loadGameSave(throwingStorage), DEFAULT_SAVE_STATE);
+    assert.deepEqual(saveGameSave(throwingStorage, createDefaultSaveState()), DEFAULT_SAVE_STATE);
+    assert.deepEqual(clearGameSave(throwingStorage), DEFAULT_SAVE_STATE);
+  } finally {
+    delete globalThis.localStorage;
+  }
+
+  const methodsThrow = {
+    getItem() { throw new Error("read"); },
+    setItem() { throw new Error("write"); },
+    removeItem() { throw new Error("clear"); },
+  };
+  assert.deepEqual(loadGameSave(methodsThrow), DEFAULT_SAVE_STATE);
+  assert.deepEqual(saveGameSave(methodsThrow, createDefaultSaveState()), DEFAULT_SAVE_STATE);
+  assert.deepEqual(clearGameSave(methodsThrow), DEFAULT_SAVE_STATE);
+});
+
+test("uncloneable saves do not overwrite an existing valid save", () => {
+  const valid = {
+    version: SAVE_VERSION,
+    unlockedLevel: 2,
+    bestResults: {},
+    drafts: { 1: { devices: {}, connections: [] } },
+  };
+  let stored = serializeGameSave(valid);
+  const storage = {
+    getItem() { return stored; },
+    setItem(_key, next) { stored = next; },
+    removeItem() { stored = null; },
+  };
+  const cyclic = createDefaultSaveState();
+  cyclic.drafts = { 1: { devices: {}, connections: [] } };
+  cyclic.drafts[1].connections.push(cyclic.drafts[1]);
+
+  assert.deepEqual(saveGameSave(storage, cyclic), DEFAULT_SAVE_STATE);
+  assert.deepEqual(loadGameSave(storage), valid);
+  assert.equal(serializeGameSave(cyclic), JSON.stringify(DEFAULT_SAVE_STATE));
+});

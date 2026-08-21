@@ -23,7 +23,7 @@ import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
-import { clearGameSession, recordBestResult, resolveClearProgressDecision, restoreGameSession, saveGameSession } from "./game-session.mjs";
+import { clearGameSession, recordBestResult, resolveClearProgressDecision, restoreGameSession, saveGameSession, shouldShowOnboardingAfterRestore } from "./game-session.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -36,8 +36,10 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
   { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
 ];
 
+const emptyStorage = { getItem: () => null };
+
 export function MiniFactoryGame() {
-  const [initialSession] = useState(() => restoreGameSession(undefined));
+  const [initialSession] = useState(() => restoreGameSession(emptyStorage));
   const [activeLevelId, setActiveLevelId] = useState(initialSession.activeLevelId);
   const [unlockedLevel, setUnlockedLevel] = useState(initialSession.unlockedLevel);
   const [bestResults, setBestResults] = useState<Record<number, { elapsed: number; completed: number }>>(initialSession.bestResults);
@@ -47,8 +49,9 @@ export function MiniFactoryGame() {
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
+  const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -141,6 +144,25 @@ export function MiniFactoryGame() {
   }, [state]);
 
   useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (!active) return;
+      const restored = restoreGameSession(undefined);
+      setActiveLevelId(restored.activeLevelId);
+      setUnlockedLevel(restored.unlockedLevel);
+      setBestResults(restored.bestResults);
+      setDesign(restored.design);
+      setState(restored.state);
+      setShowOnboarding(shouldShowOnboardingAfterRestore(restored));
+      setHasRestoredSession(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasRestoredSession) return;
     const currentState = stateRef.current;
     const nextBestResults = currentState.mode === "success"
       ? recordBestResult(bestResults, activeLevelId, {
@@ -161,7 +183,7 @@ export function MiniFactoryGame() {
       design,
       state: currentState,
     });
-  }, [activeLevelId, bestResults, design, state.mode, unlockedLevel]);
+  }, [activeLevelId, bestResults, design, hasRestoredSession, state.mode, unlockedLevel]);
 
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {

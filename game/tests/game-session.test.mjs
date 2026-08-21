@@ -8,6 +8,7 @@ import {
   recordBestResult,
   resolveClearProgressDecision,
   restoreGameSession,
+  shouldShowOnboardingAfterRestore,
   saveGameSession,
 } from "../app/game/game-session.mjs";
 
@@ -85,6 +86,24 @@ test("saving a paused layout makes that layout available after a refresh", () =>
   const refreshed = restoreGameSession(storage);
   assert.equal(refreshed.activeLevelId, 2);
   assert.deepEqual(refreshed.design, draft);
+});
+
+test("restoring the second level keeps its saved draft in design mode without level-one onboarding", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 2,
+    activeLevelId: 2,
+    bestResults: {},
+    drafts: { 2: draft },
+  });
+
+  const refreshed = restoreGameSession(storage);
+
+  assert.equal(refreshed.activeLevelId, 2);
+  assert.deepEqual(refreshed.design, draft);
+  assert.equal(refreshed.state.mode, "design");
+  assert.equal(shouldShowOnboardingAfterRestore(refreshed), false);
 });
 
 test("clearing a session removes persisted progress and returns a new level-one session", () => {

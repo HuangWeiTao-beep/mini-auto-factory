@@ -20,6 +20,10 @@ export function restoreGameSession(storage, selectedLevelId) {
   };
 }
 
+export function shouldShowOnboardingAfterRestore(session) {
+  return session.activeLevelId === 1;
+}
+
 export function saveGameSession(storage, session) {
   const previous = loadGameSave(storage);
   const drafts = session.state.mode === "running"

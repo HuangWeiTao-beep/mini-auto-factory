@@ -38,3 +38,7 @@ export function clearGameSession(storage) {
   clearGameSave(storage);
   return restoreGameSession(storage, 1);
 }
+
+export function resolveClearProgressDecision(confirmed, currentSession, clearSession) {
+  return confirmed ? clearSession() : currentSession;
+}

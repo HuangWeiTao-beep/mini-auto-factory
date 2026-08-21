@@ -6,6 +6,7 @@ import { createProductionState } from "../app/game/factory-model.mjs";
 import {
   clearGameSession,
   recordBestResult,
+  resolveClearProgressDecision,
   restoreGameSession,
   saveGameSession,
 } from "../app/game/game-session.mjs";
@@ -110,6 +111,32 @@ test("clearing a session removes persisted progress and returns a new level-one 
   assert.deepEqual(session.bestResults, {});
   assert.deepEqual(session.design, { devices: {}, connections: [] });
   assert.deepEqual(session.state, createProductionState(session.design));
+});
+
+test("cancelling progress clear preserves the current session and never invokes its storage boundary", () => {
+  const storage = memoryStorage();
+  const persisted = {
+    version: SAVE_VERSION,
+    unlockedLevel: 3,
+    activeLevelId: 3,
+    bestResults: { 2: { elapsed: 33.2, completed: 10 } },
+    drafts: { 3: draft },
+  };
+  saveGameSave(storage, persisted);
+  const currentSession = restoreGameSession(storage);
+  const rawBeforeCancel = storage.getItem();
+  let clearCalls = 0;
+
+  const nextSession = resolveClearProgressDecision(false, currentSession, () => {
+    clearCalls += 1;
+    return clearGameSession(storage);
+  });
+
+  assert.strictEqual(nextSession, currentSession);
+  assert.equal(clearCalls, 0);
+  assert.equal(storage.getItem(), rawBeforeCancel);
+  assert.deepEqual(loadGameSave(storage), persisted);
+  assert.deepEqual(currentSession, restoreGameSession(storage));
 });
 
 test("session recovery remains safe without a storage implementation", () => {

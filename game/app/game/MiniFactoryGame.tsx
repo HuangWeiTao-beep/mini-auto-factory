@@ -23,7 +23,7 @@ import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
-import { clearGameSession, recordBestResult, restoreGameSession, saveGameSession } from "./game-session.mjs";
+import { clearGameSession, recordBestResult, resolveClearProgressDecision, restoreGameSession, saveGameSession } from "./game-session.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -294,8 +294,17 @@ export function MiniFactoryGame() {
     setShowLevelSelect(true);
   };
 
-  const confirmClearProgress = () => {
-    const cleared = clearGameSession(undefined);
+  const handleClearProgressDecision = (confirmed: boolean) => {
+    const currentSession = { activeLevelId, unlockedLevel, bestResults, design, state };
+    const nextSession = resolveClearProgressDecision(
+      confirmed,
+      currentSession,
+      () => clearGameSession(undefined),
+    );
+    setShowClearProgressConfirm(false);
+    if (!confirmed) return;
+
+    const cleared = nextSession;
     setActiveLevelId(cleared.activeLevelId);
     setUnlockedLevel(cleared.unlockedLevel);
     setBestResults(cleared.bestResults);
@@ -304,7 +313,6 @@ export function MiniFactoryGame() {
     setState(cleared.state);
     setConnectingFrom(null);
     setEditedWhilePaused(false);
-    setShowClearProgressConfirm(false);
     setShowLevelSelect(false);
     setShowOnboarding(true);
     setToast("本地进度已清除，已回到第 1 关。");
@@ -502,8 +510,8 @@ export function MiniFactoryGame() {
             <h2 id="clear-progress-title">清除本地进度？</h2>
             <p>关卡解锁、最佳纪录和当前布局都会删除，并回到第 1 关。这个按钮不负责后悔药。</p>
             <div className="settlement-actions">
-              <button type="button" onClick={() => setShowClearProgressConfirm(false)} autoFocus>取消</button>
-              <button className="clear-progress-confirm" type="button" onClick={confirmClearProgress}>确认清除</button>
+              <button type="button" onClick={() => handleClearProgressDecision(false)} autoFocus>取消</button>
+              <button className="clear-progress-confirm" type="button" onClick={() => handleClearProgressDecision(true)}>确认清除</button>
             </div>
           </section>
         </div>

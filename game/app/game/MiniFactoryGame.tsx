@@ -23,6 +23,7 @@ import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
+import { recordBestResult, restoreGameSession, saveGameSession } from "./game-session.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -35,13 +36,13 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
   { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
 ];
 
-const starterDesign = () => createEmptyDesign();
-
 export function MiniFactoryGame() {
+  const [initialSession] = useState(() => restoreGameSession(undefined, 1));
   const [activeLevelId, setActiveLevelId] = useState(1);
-  const [unlockedLevel, setUnlockedLevel] = useState(1);
-  const [design, setDesign] = useState<FactoryDesign>(starterDesign);
-  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign()));
+  const [unlockedLevel, setUnlockedLevel] = useState(initialSession.unlockedLevel);
+  const [bestResults, setBestResults] = useState<Record<number, { elapsed: number; completed: number }>>(initialSession.bestResults);
+  const [design, setDesign] = useState<FactoryDesign>(initialSession.design);
+  const [state, setState] = useState<ProductionState>(initialSession.state);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
@@ -135,6 +136,24 @@ export function MiniFactoryGame() {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    const currentState = stateRef.current;
+    const nextBestResults = currentState.mode === "success"
+      ? recordBestResult(bestResults, activeLevelId, {
+          elapsed: currentState.elapsed,
+          completed: currentState.completed,
+        })
+      : bestResults;
+    if (nextBestResults !== bestResults) setBestResults(nextBestResults);
+    saveGameSession(undefined, {
+      activeLevelId,
+      unlockedLevel,
+      bestResults: nextBestResults,
+      design,
+      state: currentState,
+    });
+  }, [activeLevelId, bestResults, design, state.mode, unlockedLevel]);
 
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
@@ -280,10 +299,10 @@ export function MiniFactoryGame() {
       setToast("这一关还锁着。先把前一关收拾明白。 ");
       return;
     }
-    const nextDesign = createEmptyDesign();
+    const restored = restoreGameSession(undefined, levelId);
     setActiveLevelId(levelId);
-    setDesign(nextDesign);
-    setState(createProductionState(nextDesign));
+    setDesign(restored.design);
+    setState(restored.state);
     setConnectingFrom(null);
     setEditedWhilePaused(false);
     setShowLevelSelect(false);

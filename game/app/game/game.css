@@ -225,6 +225,7 @@ button { font: inherit; }
 .level-option__number { display: block; color: var(--orange-dark); font: 800 9px var(--font-geist-mono); letter-spacing: .14em; }
 .level-option strong { display: block; margin-top: 10px; font-size: 18px; }
 .level-option small { display: block; margin-top: 8px; color: #69716e; font-size: 10px; }
+.level-option__record { color: var(--orange-dark) !important; font: 800 10px var(--font-geist-mono); }
 .level-option em { display: block; margin-top: 16px; color: #37413f; font: 800 9px var(--font-geist-mono); font-style: normal; }
 .level-option--locked em { color: #8b918e; }
 
@@ -242,6 +243,9 @@ button { font: inherit; }
 .settlement-stats div:last-child { border: 0; }
 .settlement-stats small { display: block; color: #77807d; font: 8px var(--font-geist-mono); }
 .settlement-stats strong { display: block; margin-top: 6px; font: 800 17px var(--font-geist-mono); }
+.settlement-record-feedback { margin: 14px 0 0; color: #2d7f48; font: 900 12px var(--font-geist-mono); letter-spacing: .08em; }
+.settlement-best-result { margin: 10px 0 0; color: #66706e; font-size: 11px; }
+.settlement-best-result strong { color: var(--orange-dark); font: 900 14px var(--font-geist-mono); }
 .settlement-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
 .settlement-actions button { color: white; background: var(--steel); }
 .settlement-actions .settlement-primary { background: var(--orange); }

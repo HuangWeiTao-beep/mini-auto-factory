@@ -41,6 +41,7 @@ export function MiniFactoryGame() {
   const [activeLevelId, setActiveLevelId] = useState(initialSession.activeLevelId);
   const [unlockedLevel, setUnlockedLevel] = useState(initialSession.unlockedLevel);
   const [bestResults, setBestResults] = useState<Record<number, { elapsed: number; completed: number }>>(initialSession.bestResults);
+  const [recordBroken, setRecordBroken] = useState(false);
   const [design, setDesign] = useState<FactoryDesign>(initialSession.design);
   const [state, setState] = useState<ProductionState>(initialSession.state);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
@@ -63,6 +64,7 @@ export function MiniFactoryGame() {
   const remaining = Math.max(0, level.duration - state.elapsed);
   const completion = (state.completed / level.target) * 100;
   const hasNextLevel = activeLevelId < 5;
+  const activeBestResult = bestResults[activeLevelId];
   const settlementOpen = state.mode === "success" || state.mode === "failure";
   const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
   const blockedLine = Object.values(state.lines).find(
@@ -145,6 +147,11 @@ export function MiniFactoryGame() {
           completed: currentState.completed,
         })
       : bestResults;
+    if (currentState.mode === "success" && nextBestResults !== bestResults) {
+      setRecordBroken(true);
+    } else if (currentState.mode !== "success") {
+      setRecordBroken(false);
+    }
     if (nextBestResults !== bestResults) setBestResults(nextBestResults);
     saveGameSession(undefined, {
       activeLevelId,
@@ -440,6 +447,12 @@ export function MiniFactoryGame() {
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>
               <div><small>平均产量</small><strong>{averageOutput} 件/分钟</strong></div>
             </div>
+            {state.mode === "success" && recordBroken && (
+              <p className="settlement-record-feedback" role="status" aria-live="polite">🏆 本次刷新纪录</p>
+            )}
+            {state.mode === "success" && activeBestResult && (
+              <p className="settlement-best-result">最佳纪录 <strong>{activeBestResult.elapsed.toFixed(1)} 秒</strong></p>
+            )}
             <div className="settlement-actions">
               <button className="settlement-primary" onClick={() => resetAttempt(true)} autoFocus>重新挑战</button>
               {state.mode === "success" && hasNextLevel && (
@@ -455,6 +468,7 @@ export function MiniFactoryGame() {
         <LevelSelectModal
           unlockedLevel={unlockedLevel}
           activeLevel={activeLevelId}
+          bestResults={bestResults}
           onSelect={selectLevel}
           onClose={() => setShowLevelSelect(false)}
         />

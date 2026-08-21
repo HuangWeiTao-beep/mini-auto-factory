@@ -130,6 +130,20 @@ test("settlement copy follows the active level and level five has no next-level 
   assert.match(game, /state\.mode === "success" && hasNextLevel/);
 });
 
+test("completed levels expose their best time and success settlement calls out a new record", async () => {
+  const [game, levelSelect] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(levelSelect, /bestResults/);
+  assert.match(levelSelect, /最佳纪录/);
+  assert.match(levelSelect, /bestResult\.elapsed\.toFixed\(1\)/);
+  assert.match(game, /bestResults=\{bestResults\}/);
+  assert.match(game, /本次刷新纪录/);
+  assert.match(game, /recordBestResult\(bestResults, activeLevelId/);
+});
+
 test("failure settlement consumes the direct diagnostic policy before the route fallback", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),

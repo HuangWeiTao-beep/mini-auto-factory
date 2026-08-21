@@ -3,6 +3,7 @@ import { LEVELS } from "./factory-model.mjs";
 type Props = {
   unlockedLevel: number;
   activeLevel: number;
+  bestResults: Record<number, { elapsed: number; completed: number }>;
   onSelect: (levelId: number) => void;
   onClose: () => void;
 };
@@ -12,6 +13,7 @@ const levelIds = Object.keys(LEVELS).map(Number).sort((a, b) => a - b);
 export function LevelSelectModal({
   unlockedLevel,
   activeLevel,
+  bestResults,
   onSelect,
   onClose,
 }: Props) {
@@ -27,6 +29,7 @@ export function LevelSelectModal({
             const level = LEVELS[levelId];
             const locked = levelId > unlockedLevel;
             const active = levelId === activeLevel;
+            const bestResult = bestResults[levelId];
             return (
               <button
                 key={levelId}
@@ -38,6 +41,7 @@ export function LevelSelectModal({
                 <span className="level-option__number">{`第 ${levelId} 关`}</span>
                 <strong>{level.name}</strong>
                 <small>{level.duration} 秒内完成 {level.target} 个合格螺栓</small>
+                {bestResult && <small className="level-option__record">最佳纪录 {bestResult.elapsed.toFixed(1)} 秒</small>}
                 <em>{locked ? "🔒 尚未解锁" : active ? "当前关卡" : "进入关卡 →"}</em>
               </button>
             );

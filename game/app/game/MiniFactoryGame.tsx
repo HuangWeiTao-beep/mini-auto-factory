@@ -88,14 +88,14 @@ export function MiniFactoryGame() {
           tone: blockedLine.item?.status === "blocked" ? "warning" : "wait",
           message: blockedLine.item?.status === "blocked"
             ? `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 无法接收当前物料。${state.warning ?? "请检查前置工序。"}`
-            : `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 的加工位与等待位已满，物料停在线上。`,
+            : `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 的加工位与等待位已满，物料停在线上。请暂停后检查下游节拍或调整布局。`,
         }
       : state.warning
         ? { tone: "warning", message: `目标设备阻塞：${state.warning}` }
         : routingWaitConnection
           ? {
               tone: "wait",
-              message: `分支 ${String.fromCharCode(65 + routingWaitConnection.branchIndex)} 正在等待：轮到的线路被占用，物料保留且不会跳过。`,
+              message: `分支 ${String.fromCharCode(65 + routingWaitConnection.branchIndex)} 正在等待：轮到的线路被占用，物料保留且不会跳过。请等待支路清空，或暂停后调整支路负载。`,
             }
           : null;
   const visibleFeedback = state.mode === "running" ? contextualFeedback : null;

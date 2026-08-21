@@ -90,6 +90,44 @@ function createLevelFourLineDesign(cutterGridX) {
   return connectDevices(design, "source", "cutter", LEVELS[4]);
 }
 
+function createCompactSingleLineDesign(level) {
+  let design = createEmptyDesign();
+  const positions = [
+    [6, 2],
+    [1, 2],
+    [1, 7],
+    [6, 7],
+    [11, 7],
+  ];
+  for (const [index, type] of ["source", "cutter", "lathe", "drill", "exit"].entries()) {
+    const [gridX, gridY] = positions[index];
+    design = addDevice(design, type, gridX * 36, gridY * 36, type);
+  }
+  design = connectDevices(design, "source", "cutter", level);
+  design = connectDevices(design, "cutter", "lathe", level);
+  design = connectDevices(design, "lathe", "drill", level);
+  return connectDevices(design, "drill", "exit", level);
+}
+
+function createSparseLevelFourDesign() {
+  let design = createEmptyDesign();
+  const positions = [
+    [1, 2],
+    [16, 2],
+    [1, 7],
+    [16, 7],
+    [11, 2],
+  ];
+  for (const [index, type] of ["source", "cutter", "lathe", "drill", "exit"].entries()) {
+    const [gridX, gridY] = positions[index];
+    design = addDevice(design, type, gridX * 36, gridY * 36, type);
+  }
+  design = connectDevices(design, "source", "cutter", LEVELS[4]);
+  design = connectDevices(design, "cutter", "lathe", LEVELS[4]);
+  design = connectDevices(design, "lathe", "drill", LEVELS[4]);
+  return connectDevices(design, "drill", "exit", LEVELS[4]);
+}
+
 function launchLevelFourLine(design) {
   const state = createProductionState(design);
   state.mode = "running";
@@ -99,20 +137,20 @@ function launchLevelFourLine(design) {
 
 function createCompactLevelFiveDesign() {
   let design = createEmptyDesign();
-  const branches = [
-    { suffix: "a", row: 2 },
-    { suffix: "b", row: 4 },
+  const devices = [
+    ["source", "source", 6, 2],
+    ["exit", "exit", 11, 7],
+    ["cutter-a", "cutter", 1, 2],
+    ["lathe-a", "lathe", 1, 7],
+    ["drill-a", "drill", 6, 7],
+    ["cutter-b", "cutter", 11, 2],
+    ["lathe-b", "lathe", 16, 2],
+    ["drill-b", "drill", 16, 7],
   ];
-
-  design = addDevice(design, "source", 36, 108, "source");
-  for (const { suffix, row } of branches) {
-    design = addDevice(design, "cutter", 72, row * 36, `cutter-${suffix}`);
-    design = addDevice(design, "lathe", 108, row * 36, `lathe-${suffix}`);
-    design = addDevice(design, "drill", 144, row * 36, `drill-${suffix}`);
+  for (const [id, type, gridX, gridY] of devices) {
+    design = addDevice(design, type, gridX * 36, gridY * 36, id);
   }
-  design = addDevice(design, "exit", 180, 108, "exit");
-
-  for (const { suffix } of branches) {
+  for (const suffix of ["a", "b"]) {
     design = connectDevices(design, "source", `cutter-${suffix}`, LEVELS[5]);
     design = connectDevices(design, `cutter-${suffix}`, `lathe-${suffix}`, LEVELS[5]);
     design = connectDevices(design, `lathe-${suffix}`, `drill-${suffix}`, LEVELS[5]);
@@ -121,11 +159,117 @@ function createCompactLevelFiveDesign() {
   return design;
 }
 
+function assertPlayerReachableLayout(design, level) {
+  const devices = Object.values(design.devices);
+  for (const device of devices) {
+    assert.ok(device.gridX >= 0 && device.gridX <= 16);
+    assert.ok(device.gridY >= 2 && device.gridY <= 9);
+    assert.equal(
+      level.obstacles.some(
+        (obstacle) => obstacle.gridX === device.gridX && obstacle.gridY === device.gridY,
+      ),
+      false,
+    );
+  }
+  for (const [index, device] of devices.entries()) {
+    for (const other of devices.slice(index + 1)) {
+      const overlaps =
+        Math.abs(device.gridX - other.gridX) * 36 < 178 &&
+        Math.abs(device.gridY - other.gridY) * 36 < 154;
+      assert.equal(overlaps, false, `${device.id} and ${other.id} must not overlap`);
+    }
+  }
+}
+
 test("level helpers expose limits and unlock only the next chapter level", () => {
   assert.equal(getLevelConfig(4), LEVELS[4]);
   assert.equal(getDeviceLimit(LEVELS[3], "lathe"), 2);
   assert.equal(nextUnlockedLevel(2, 3), 4);
   assert.equal(nextUnlockedLevel(5, 5), 5);
+});
+
+test("the five level configurations match the approved chapter-one rules", () => {
+  const summary = Object.values(LEVELS).map((level) => ({
+    id: level.id,
+    name: level.name,
+    duration: level.duration,
+    target: level.target,
+    deviceLimits: level.deviceLimits,
+    transportMode: level.transportMode,
+    transportDuration: level.transportDuration,
+    sourceInterval: level.sourceInterval,
+    machineDurations: level.machineDurations,
+    obstacles: level.obstacles,
+  }));
+
+  assert.deepEqual(summary, [
+    {
+      id: 1,
+      name: "螺栓生产",
+      duration: 60,
+      target: 10,
+      deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 0, exit: 1 },
+      transportMode: "fixed",
+      transportDuration: 0.5,
+      sourceInterval: 3,
+      machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+      obstacles: [],
+    },
+    {
+      id: 2,
+      name: "钻孔定位",
+      duration: 45,
+      target: 10,
+      deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
+      transportMode: "fixed",
+      transportDuration: 0.5,
+      sourceInterval: 3,
+      machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+      obstacles: [],
+    },
+    {
+      id: 3,
+      name: "产能告急",
+      duration: 27,
+      target: 12,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+      transportMode: "fixed",
+      transportDuration: 0.5,
+      sourceInterval: 1,
+      machineDurations: { cutter: 1, lathe: 3, drill: 1 },
+      obstacles: [],
+    },
+    {
+      id: 4,
+      name: "有限工位",
+      duration: 50,
+      target: 10,
+      deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
+      transportMode: "distance",
+      transportDuration: 0.5,
+      sourceInterval: 3,
+      machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+      obstacles: [{ gridX: 7, gridY: 3 }, { gridX: 12, gridY: 7 }, { gridX: 17, gridY: 3 }],
+    },
+    {
+      id: 5,
+      name: "工坊验收",
+      duration: 40,
+      target: 14,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, exit: 1 },
+      transportMode: "distance",
+      transportDuration: 0.5,
+      sourceInterval: 1,
+      machineDurations: { cutter: 1, lathe: 3, drill: 1 },
+      obstacles: [
+        { gridX: 7, gridY: 3 },
+        { gridX: 12, gridY: 7 },
+        { gridX: 17, gridY: 3 },
+        { gridX: 7, gridY: 10 },
+        { gridX: 17, gridY: 10 },
+      ],
+    },
+  ]);
 });
 
 test("levels three and five expose exactly one fast source", () => {
@@ -336,14 +480,45 @@ test("a compact level-five layout fans one source into two branches and complete
   const design = createCompactLevelFiveDesign();
   const sources = Object.values(design.devices).filter(({ type }) => type === "source");
 
+  assertPlayerReachableLayout(design, LEVELS[5]);
   assert.equal(sources.length, 1);
   assert.equal(outgoing(design, sources[0].id).length, 2);
 
-  const state = simulateAtLevel(design, LEVELS[5], 28);
+  const state = simulateAtLevel(design, LEVELS[5], LEVELS[5].duration);
 
   assert.equal(state.completed, 14);
   assert.equal(state.mode, "success");
   assert.ok(state.elapsed <= 40);
+});
+
+test("a compact level-four line completes its target within the full time limit", () => {
+  const design = createCompactSingleLineDesign(LEVELS[4]);
+  const state = simulateAtLevel(design, LEVELS[4], 50);
+
+  assertPlayerReachableLayout(design, LEVELS[4]);
+  assert.equal(state.completed, 10);
+  assert.equal(state.mode, "success");
+  assert.ok(state.elapsed <= LEVELS[4].duration);
+});
+
+test("a sparse level-four line misses the target because distance consumes its time budget", () => {
+  const design = createSparseLevelFourDesign();
+  const state = simulateAtLevel(design, LEVELS[4], 50);
+
+  assertPlayerReachableLayout(design, LEVELS[4]);
+  assert.equal(state.mode, "failure");
+  assert.ok(state.completed < LEVELS[4].target);
+  assert.equal(state.elapsed, LEVELS[4].duration);
+});
+
+test("a single level-five branch fails the workshop target before time expires", () => {
+  const design = createCompactSingleLineDesign(LEVELS[5]);
+  const state = simulateAtLevel(design, LEVELS[5], 40);
+
+  assertPlayerReachableLayout(design, LEVELS[5]);
+  assert.equal(state.mode, "failure");
+  assert.ok(state.completed < LEVELS[5].target);
+  assert.equal(state.elapsed, LEVELS[5].duration);
 });
 
 test("level three dispatches A then B and holds output when the selected A branch is occupied", () => {

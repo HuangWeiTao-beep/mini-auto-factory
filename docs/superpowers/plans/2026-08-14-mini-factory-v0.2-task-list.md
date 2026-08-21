@@ -6,19 +6,19 @@
 
 ## 里程碑 A：规则与交互收口
 
-- [ ] A1. 对照五关设计规格，核对时限、目标、设备上限、障碍和运输规则。
+- [x] A1. 对照五关设计规格，核对时限、目标、设备上限、障碍和运输规则。
   - 涉及：`game/app/game/factory-model.mjs`、`docs/superpowers/specs/2026-08-13-mini-automation-factory-chapter-one-design.md`
   - 验收：第 1～5 关的关卡参数与设计规格一致。
 
-- [ ] A2. 为每关补齐一条确定性通关模拟和一条代表性失败模拟。
+- [x] A2. 为每关补齐一条确定性通关模拟和一条代表性失败模拟。
   - 涉及：`game/tests/factory-model.test.mjs`
   - 验收：覆盖正确路径、错误工序、质检拒收、堵塞、距离运输和分支轮转；`npm.cmd test` 通过。
 
-- [ ] A3. 收口生产反馈文案与状态表现。
+- [x] A3. 收口生产反馈文案与状态表现。
   - 涉及：`game/app/game/MiniFactoryGame.tsx`、`game/app/game/MachineCard.tsx`、`game/app/game/feedback-policy.mjs`
   - 验收：玩家能明确得到“问题位置、原因、可采取动作”三类信息。
 
-- [ ] A4. 校验关键交互可访问性。
+- [x] A4. 校验关键交互可访问性。
   - 涉及：`game/app/game/LevelSelectModal.tsx`、`game/app/game/FactoryFloor.tsx`、`game/app/game/MiniFactoryGame.tsx`
   - 验收：Esc 取消连线；弹窗有可读标签和焦点入口；禁用状态不允许运行中编辑。
 

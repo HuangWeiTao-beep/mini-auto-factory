@@ -194,9 +194,10 @@ button { font: inherit; }
 .legend-wait { background: #f2b134; }
 .legend-error { background: var(--red); }
 
-.help-control, .chapter-control { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; color: #e7ece9; border: 1px solid #4c5754; background: transparent; cursor: pointer; font: 800 10px var(--font-geist-mono); letter-spacing: .08em; }
-.help-control span, .chapter-control span { display: grid; width: 16px; height: 16px; place-items: center; color: var(--ink); border-radius: 50%; background: var(--cyan); }
+.help-control, .chapter-control, .clear-progress-control { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; color: #e7ece9; border: 1px solid #4c5754; background: transparent; cursor: pointer; font: 800 10px var(--font-geist-mono); letter-spacing: .08em; }
+.help-control span, .chapter-control span, .clear-progress-control span { display: grid; width: 16px; height: 16px; place-items: center; color: var(--ink); border-radius: 50%; background: var(--cyan); }
 .chapter-control span { background: var(--orange); }
+.clear-progress-control span { background: var(--red); }
 .chapter-control:disabled { opacity: .38; cursor: not-allowed; }
 .onboarding-backdrop { position: fixed; z-index: 45; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(11,14,14,.62); backdrop-filter: blur(3px); }
 .onboarding-card { position: relative; width: min(620px, 100%); padding: 34px 38px 32px; border: 2px solid #26302e; border-top: 8px solid var(--orange); background: var(--paper); box-shadow: 12px 14px 0 rgba(0,0,0,.3); }
@@ -249,6 +250,7 @@ button { font: inherit; }
 .settlement-actions { display: flex; justify-content: center; gap: 10px; margin-top: 22px; }
 .settlement-actions button { color: white; background: var(--steel); }
 .settlement-actions .settlement-primary { background: var(--orange); }
+.settlement-actions .clear-progress-confirm { background: var(--red); }
 .settlement-actions button:disabled { color: #999f9c; background: #d7d2c7; cursor: not-allowed; }
 
 @keyframes pulse { 50% { opacity: .45; } }

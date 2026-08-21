@@ -28,6 +28,7 @@ test("server-renders the mini factory game shell", async () => {
   assert.match(html, /aria-label="打开玩法说明"/);
   assert.match(html, /章节关卡/);
   assert.match(html, /aria-label="打开关卡选择"/);
+  assert.match(html, /aria-label="清除本地进度"/);
   assert.equal(html.match(/aria-modal="true"/g)?.length, 1);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/);
 });

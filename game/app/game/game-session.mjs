@@ -1,5 +1,5 @@
 import { createEmptyDesign, createProductionState } from "./factory-model.mjs";
-import { loadGameSave, saveGameSave } from "./game-save.mjs";
+import { clearGameSave, loadGameSave, saveGameSave } from "./game-save.mjs";
 
 export function recordBestResult(bestResults, levelId, result) {
   const previous = bestResults[levelId];
@@ -32,4 +32,9 @@ export function saveGameSession(storage, session) {
     bestResults: session.bestResults,
     drafts,
   });
+}
+
+export function clearGameSession(storage) {
+  clearGameSave(storage);
+  return restoreGameSession(storage, 1);
 }

@@ -4,6 +4,7 @@ import test from "node:test";
 import { SAVE_VERSION, loadGameSave, saveGameSave } from "../app/game/game-save.mjs";
 import { createProductionState } from "../app/game/factory-model.mjs";
 import {
+  clearGameSession,
   recordBestResult,
   restoreGameSession,
   saveGameSession,
@@ -83,6 +84,32 @@ test("saving a paused layout makes that layout available after a refresh", () =>
   const refreshed = restoreGameSession(storage);
   assert.equal(refreshed.activeLevelId, 2);
   assert.deepEqual(refreshed.design, draft);
+});
+
+test("clearing a session removes persisted progress and returns a new level-one session", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 3,
+    activeLevelId: 3,
+    bestResults: { 2: { elapsed: 33.2, completed: 10 } },
+    drafts: { 3: draft },
+  });
+
+  const session = clearGameSession(storage);
+
+  assert.deepEqual(loadGameSave(storage), {
+    version: SAVE_VERSION,
+    unlockedLevel: 1,
+    activeLevelId: 1,
+    bestResults: {},
+    drafts: {},
+  });
+  assert.equal(session.activeLevelId, 1);
+  assert.equal(session.unlockedLevel, 1);
+  assert.deepEqual(session.bestResults, {});
+  assert.deepEqual(session.design, { devices: {}, connections: [] });
+  assert.deepEqual(session.state, createProductionState(session.design));
 });
 
 test("session recovery remains safe without a storage implementation", () => {

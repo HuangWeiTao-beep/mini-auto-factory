@@ -23,7 +23,7 @@ import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
-import { recordBestResult, restoreGameSession, saveGameSession } from "./game-session.mjs";
+import { clearGameSession, recordBestResult, restoreGameSession, saveGameSession } from "./game-session.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import "./game.css";
@@ -48,6 +48,7 @@ export function MiniFactoryGame() {
   const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
   const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<number | null>(null);
@@ -66,7 +67,7 @@ export function MiniFactoryGame() {
   const hasNextLevel = activeLevelId < 5;
   const activeBestResult = bestResults[activeLevelId];
   const settlementOpen = state.mode === "success" || state.mode === "failure";
-  const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
+  const overlayOpen = showLevelSelect || showOnboarding || settlementOpen || showClearProgressConfirm;
   const blockedLine = Object.values(state.lines).find(
     (line) => line.item?.status === "blocked" || line.item?.status === "waiting",
   );
@@ -293,6 +294,22 @@ export function MiniFactoryGame() {
     setShowLevelSelect(true);
   };
 
+  const confirmClearProgress = () => {
+    const cleared = clearGameSession(undefined);
+    setActiveLevelId(cleared.activeLevelId);
+    setUnlockedLevel(cleared.unlockedLevel);
+    setBestResults(cleared.bestResults);
+    setRecordBroken(false);
+    setDesign(cleared.design);
+    setState(cleared.state);
+    setConnectingFrom(null);
+    setEditedWhilePaused(false);
+    setShowClearProgressConfirm(false);
+    setShowLevelSelect(false);
+    setShowOnboarding(true);
+    setToast("本地进度已清除，已回到第 1 关。");
+  };
+
   const paletteDetail = (type: DeviceType) => {
     if (type === "source") return `每 ${level.sourceInterval} 秒生成长钢棒`;
     if (type === "cutter") return `${level.machineDurations.cutter} 秒 · 钢棒变短料`;
@@ -339,6 +356,9 @@ export function MiniFactoryGame() {
               <span aria-hidden="true">?</span>玩法
             </button>
           )}
+          <button className="clear-progress-control" type="button" aria-label="清除本地进度" onClick={() => setShowClearProgressConfirm(true)}>
+            <span aria-hidden="true">×</span>清除进度
+          </button>
         </div>
       </header>
 
@@ -472,6 +492,21 @@ export function MiniFactoryGame() {
           onSelect={selectLevel}
           onClose={() => setShowLevelSelect(false)}
         />
+      )}
+
+      {showClearProgressConfirm && (
+        <div className="settlement-backdrop" role="dialog" aria-modal="true" aria-labelledby="clear-progress-title">
+          <section className="settlement-card settlement-card--failure clear-progress-card">
+            <span className="settlement-kicker">LOCAL PROGRESS</span>
+            <div className="settlement-icon">!</div>
+            <h2 id="clear-progress-title">清除本地进度？</h2>
+            <p>关卡解锁、最佳纪录和当前布局都会删除，并回到第 1 关。这个按钮不负责后悔药。</p>
+            <div className="settlement-actions">
+              <button type="button" onClick={() => setShowClearProgressConfirm(false)} autoFocus>取消</button>
+              <button className="clear-progress-confirm" type="button" onClick={confirmClearProgress}>确认清除</button>
+            </div>
+          </section>
+        </div>
       )}
     </main>
   );

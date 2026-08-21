@@ -4,28 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import {
   DEVICE_TYPES,
-  LEVELS,
   addDevice,
-  advanceProduction,
   canPlaceDevice,
   connectDevices,
-  createEmptyDesign,
-  createProductionState,
   getDeviceLimit,
   moveDevice,
-  nextUnlockedLevel,
   outgoing,
-  pauseProduction,
   removeConnection,
-  startProduction,
 } from "./factory-model.mjs";
-import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
+import type { DeviceType } from "./factory-model.mjs";
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
-import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
-import { clearGameSession, recordBestResult, resolveClearProgressDecision, restoreGameSession, saveGameSession, shouldShowOnboardingAfterRestore } from "./game-session.mjs";
+import { getProductionActionLabel } from "./production-controls.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
+import { useGameSession } from "./useGameSession";
 import "./game.css";
 
 const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: string }> = [
@@ -36,30 +29,33 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
   { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
 ];
 
-const emptyStorage = { getItem: () => null };
-
 export function MiniFactoryGame() {
-  const [initialSession] = useState(() => restoreGameSession(emptyStorage));
-  const [activeLevelId, setActiveLevelId] = useState(initialSession.activeLevelId);
-  const [unlockedLevel, setUnlockedLevel] = useState(initialSession.unlockedLevel);
-  const [bestResults, setBestResults] = useState<Record<number, { elapsed: number; completed: number }>>(initialSession.bestResults);
-  const [recordBroken, setRecordBroken] = useState(false);
-  const [design, setDesign] = useState<FactoryDesign>(initialSession.design);
-  const [state, setState] = useState<ProductionState>(initialSession.state);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
-  const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
-  const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
-  const previousTime = useRef<number | null>(null);
-  const designRef = useRef(design);
-  const stateRef = useRef(state);
+  const handleSessionRestore = useCallback((restored: { activeLevelId: number }) => {
+    setShowOnboarding(restored.activeLevelId === 1);
+  }, []);
+  const {
+    activeLevelId,
+    unlockedLevel,
+    bestResults,
+    recordBroken,
+    design,
+    state,
+    editedWhilePaused,
+    level,
+    mutateDesign,
+    start,
+    pause,
+    reset,
+    selectLevel: selectSessionLevel,
+    clearProgress,
+  } = useGameSession({ onRestored: handleSessionRestore });
 
-  const level = LEVELS[activeLevelId];
   const palette = paletteDefinitions
     .filter((item) => getDeviceLimit(level, item.type) > 0)
     .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
@@ -120,71 +116,6 @@ export function MiniFactoryGame() {
   );
   const productionActionLabel = getProductionActionLabel(state.mode, editedWhilePaused);
 
-  const mutateDesign = useCallback((mutation: (current: FactoryDesign) => FactoryDesign) => {
-    const next = mutation(design);
-    if (next === design) return;
-    setDesign(next);
-    setEditedWhilePaused((edited) => markDesignEdited(
-      state.mode,
-      edited,
-      design,
-      next,
-    ));
-    if (state.mode !== "paused") {
-      setState(createProductionState(next));
-    }
-  }, [design, state.mode]);
-
-  useEffect(() => {
-    designRef.current = design;
-  }, [design]);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  useEffect(() => {
-    let active = true;
-    queueMicrotask(() => {
-      if (!active) return;
-      const restored = restoreGameSession(undefined);
-      setActiveLevelId(restored.activeLevelId);
-      setUnlockedLevel(restored.unlockedLevel);
-      setBestResults(restored.bestResults);
-      setDesign(restored.design);
-      setState(restored.state);
-      setShowOnboarding(shouldShowOnboardingAfterRestore(restored));
-      setHasRestoredSession(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hasRestoredSession) return;
-    const currentState = stateRef.current;
-    const nextBestResults = currentState.mode === "success"
-      ? recordBestResult(bestResults, activeLevelId, {
-          elapsed: currentState.elapsed,
-          completed: currentState.completed,
-        })
-      : bestResults;
-    if (currentState.mode === "success" && nextBestResults !== bestResults) {
-      setRecordBroken(true);
-    } else if (currentState.mode !== "success") {
-      setRecordBroken(false);
-    }
-    if (nextBestResults !== bestResults) setBestResults(nextBestResults);
-    saveGameSession(undefined, {
-      activeLevelId,
-      unlockedLevel,
-      bestResults: nextBestResults,
-      design,
-      state: currentState,
-    });
-  }, [activeLevelId, bestResults, design, hasRestoredSession, state.mode, unlockedLevel]);
-
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConnectingFrom(null);
@@ -192,31 +123,6 @@ export function MiniFactoryGame() {
     window.addEventListener("keydown", cancel);
     return () => window.removeEventListener("keydown", cancel);
   }, []);
-
-  useEffect(() => {
-    if (state.mode !== "running") {
-      previousTime.current = null;
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      return;
-    }
-    const loop = (time: number) => {
-      const previous = previousTime.current ?? time;
-      previousTime.current = time;
-      const delta = Math.min(0.1, (time - previous) / 1000);
-      const current = stateRef.current;
-      const next = advanceProduction(current, designRef.current, level, delta);
-      stateRef.current = next;
-      setState(next);
-      if (current.mode !== "success" && next.mode === "success") {
-        setUnlockedLevel((unlocked) => nextUnlockedLevel(unlocked, level.id));
-      }
-      frameRef.current = requestAnimationFrame(loop);
-    };
-    frameRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
-  }, [level, state.mode]);
 
   const beginPaletteDrag = (event: DragEvent<HTMLElement>, type: DeviceType) => {
     event.dataTransfer.setData("application/x-factory-palette", type);
@@ -278,22 +184,18 @@ export function MiniFactoryGame() {
       return;
     }
     setConnectingFrom(null);
-    setState((current) => startProduction(current, { edited: editedWhilePaused, design, level }));
-    setEditedWhilePaused(false);
+    start();
     setToast(editedWhilePaused ? "设计已更新，本轮生产从零开始。" : "产线启动，布局已锁定。");
   };
 
   const handlePause = () => {
-    setState((current) => pauseProduction(current));
+    pause();
     setToast("生产已暂停。现在可以调整设备和连线。 ");
   };
 
   const resetAttempt = (keepDesign: boolean) => {
-    const nextDesign = keepDesign ? design : createEmptyDesign();
-    setDesign(nextDesign);
-    setState(createProductionState(nextDesign));
+    reset(keepDesign);
     setConnectingFrom(null);
-    setEditedWhilePaused(false);
     setToast(keepDesign ? "生产状态已清空，设备和连线为你保留。" : "画布已清空，重新设计吧。 ");
   };
 
@@ -317,24 +219,11 @@ export function MiniFactoryGame() {
   };
 
   const handleClearProgressDecision = (confirmed: boolean) => {
-    const currentSession = { activeLevelId, unlockedLevel, bestResults, design, state };
-    const nextSession = resolveClearProgressDecision(
-      confirmed,
-      currentSession,
-      () => clearGameSession(undefined),
-    );
     setShowClearProgressConfirm(false);
     if (!confirmed) return;
 
-    const cleared = nextSession;
-    setActiveLevelId(cleared.activeLevelId);
-    setUnlockedLevel(cleared.unlockedLevel);
-    setBestResults(cleared.bestResults);
-    setRecordBroken(false);
-    setDesign(cleared.design);
-    setState(cleared.state);
+    clearProgress();
     setConnectingFrom(null);
-    setEditedWhilePaused(false);
     setShowLevelSelect(false);
     setShowOnboarding(true);
     setToast("本地进度已清除，已回到第 1 关。");
@@ -349,16 +238,11 @@ export function MiniFactoryGame() {
   };
 
   const selectLevel = (levelId: number) => {
-    if (!LEVELS[levelId] || levelId > unlockedLevel) {
+    if (!selectSessionLevel(levelId)) {
       setToast("这一关还锁着。先把前一关收拾明白。 ");
       return;
     }
-    const restored = restoreGameSession(undefined, levelId);
-    setActiveLevelId(levelId);
-    setDesign(restored.design);
-    setState(restored.state);
     setConnectingFrom(null);
-    setEditedWhilePaused(false);
     setShowLevelSelect(false);
     setShowOnboarding(levelId === 1);
     setToast(`第 ${levelId} 关已载入。先摆设备，再连产线。`);

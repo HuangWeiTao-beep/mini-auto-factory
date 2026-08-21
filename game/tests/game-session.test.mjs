@@ -2,13 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { SAVE_VERSION, loadGameSave, saveGameSave } from "../app/game/game-save.mjs";
-import { createProductionState } from "../app/game/factory-model.mjs";
+import { LEVELS, createProductionState } from "../app/game/factory-model.mjs";
 import {
+  applyProductionState,
   clearGameSession,
   recordBestResult,
   resolveClearProgressDecision,
   restoreGameSession,
+  resetGameSession,
+  selectGameLevel,
+  startGameSession,
   shouldShowOnboardingAfterRestore,
+  toPersistedGameSession,
+  updateGameDesign,
   saveGameSession,
 } from "../app/game/game-session.mjs";
 
@@ -170,4 +176,121 @@ test("a faster successful run replaces the best result while a slower run does n
     1: { elapsed: 38.2, completed: 10 },
   });
   assert.deepEqual(recordBestResult(current, 1, { elapsed: 49.7, completed: 10 }), current);
+});
+
+test("a newly completed level updates the session result and unlocks its successor", () => {
+  const runningState = { ...createProductionState(draft), mode: "running" };
+  const completedState = { ...runningState, mode: "success", elapsed: 41.5, completed: 10 };
+  const session = {
+    activeLevelId: 1,
+    unlockedLevel: 1,
+    bestResults: {},
+    design: draft,
+    state: runningState,
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+
+  const settled = applyProductionState(session, completedState, LEVELS[1]);
+
+  assert.equal(settled.state, completedState);
+  assert.equal(settled.unlockedLevel, 2);
+  assert.deepEqual(settled.bestResults, { 1: { elapsed: 41.5, completed: 10 } });
+  assert.equal(settled.recordBroken, true);
+});
+
+test("switching to an unlocked level restores its draft as a fresh design session", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 1,
+    activeLevelId: 1,
+    bestResults: {},
+    drafts: { 2: draft },
+  });
+  const current = {
+    ...restoreGameSession(storage),
+    unlockedLevel: 2,
+    bestResults: { 1: { elapsed: 41.5, completed: 10 } },
+    editedWhilePaused: true,
+    recordBroken: true,
+  };
+
+  const switched = selectGameLevel(storage, current, 2);
+
+  assert.equal(switched.accepted, true);
+  assert.equal(switched.session.activeLevelId, 2);
+  assert.deepEqual(switched.session.design, draft);
+  assert.equal(switched.session.state.mode, "design");
+  assert.equal(switched.session.unlockedLevel, 2);
+  assert.deepEqual(switched.session.bestResults, { 1: { elapsed: 41.5, completed: 10 } });
+  assert.equal(switched.session.editedWhilePaused, false);
+  assert.equal(switched.session.recordBroken, false);
+});
+
+test("editing a paused session makes its next start a fresh production attempt", () => {
+  const pausedState = { ...createProductionState(draft), mode: "paused", elapsed: 12, completed: 3 };
+  const session = {
+    activeLevelId: 1,
+    unlockedLevel: 1,
+    bestResults: {},
+    design: draft,
+    state: pausedState,
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+  const revisedDesign = { devices: {}, connections: [] };
+
+  const revised = updateGameDesign(session, revisedDesign);
+  const restarted = startGameSession(revised, LEVELS[1]);
+
+  assert.equal(revised.state, pausedState);
+  assert.equal(revised.editedWhilePaused, true);
+  assert.equal(restarted.state.mode, "running");
+  assert.equal(restarted.state.elapsed, 0);
+  assert.equal(restarted.state.completed, 0);
+  assert.equal(restarted.editedWhilePaused, false);
+});
+
+test("resetting a session without its layout creates an empty design attempt", () => {
+  const runningState = { ...createProductionState(draft), mode: "running", elapsed: 12, completed: 3 };
+  const session = {
+    activeLevelId: 1,
+    unlockedLevel: 1,
+    bestResults: {},
+    design: draft,
+    state: runningState,
+    editedWhilePaused: true,
+    recordBroken: true,
+  };
+
+  const reset = resetGameSession(session, false);
+
+  assert.deepEqual(reset.design, { devices: {}, connections: [] });
+  assert.equal(reset.state.mode, "design");
+  assert.equal(reset.state.elapsed, 0);
+  assert.equal(reset.editedWhilePaused, false);
+  assert.equal(reset.recordBroken, false);
+});
+
+test("a running session persists only its stable progress fields", () => {
+  const running = {
+    activeLevelId: 2,
+    unlockedLevel: 2,
+    bestResults: { 1: { elapsed: 41.5, completed: 10 } },
+    design: draft,
+    state: { ...createProductionState(draft), mode: "running", elapsed: 12, completed: 3 },
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+
+  const persisted = toPersistedGameSession(running);
+
+  assert.deepEqual(persisted, {
+    activeLevelId: 2,
+    unlockedLevel: 2,
+    bestResults: { 1: { elapsed: 41.5, completed: 10 } },
+    design: draft,
+    state: { mode: "running" },
+  });
 });

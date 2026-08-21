@@ -74,21 +74,13 @@ npm.cmd run install:e2e
 
 右上角“清除进度”会先弹出二次确认。取消不会改动任何进度；确认后会删除本地存档并回到第 1 关。
 
-## Cloudflare Workers 部署
+## 发布到 ChatGPT Sites
 
-项目使用 Vinext、Cloudflare Vite 插件和 [`worker/index.ts`](worker/index.ts) 作为 Worker 入口。发布前请确保你拥有自己的 Cloudflare 账号及该账号的发布权限。
+本项目当前使用 **ChatGPT Sites** 发布，线上站点由根目录 [`.openai/hosting.json`](../.openai/hosting.json) 中的项目绑定关联。发布流程是：验证当前代码、保存一个站点版本、再将该版本部署到生产地址。
 
-在 `game/` 目录中执行：
+这不是 GitHub 自动发布流程，也不需要运行 `wrangler deploy`。项目保留的 Vinext、Cloudflare Vite 插件和 [`worker/index.ts`](worker/index.ts) 用于兼容运行环境、本地开发和构建；当前版本未配置 Cloudflare D1 数据库或 R2 存储。
 
-```powershell
-npx wrangler login
-npm run build
-npx wrangler deploy
-```
-
-构建会生成 Wrangler 所需的部署描述；`wrangler deploy` 会使用你的 Cloudflare 登录状态发布 Worker 与构建产物。Worker 名称、域名、路由和账号权限均由发布者配置与承担；本项目不会替你创建外部资源或替你发布。
-
-Cloudflare 的配置字段和部署行为会更新，遇到账号或路由问题时以 [Cloudflare Workers 配置文档](https://developers.cloudflare.com/workers/wrangler/configuration/) 为准。
+线上试玩地址：<https://mini-automation-factory-bolt-v01.ond6468.chatgpt.site>
 
 ## 发布验收与常见问题
 

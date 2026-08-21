@@ -26,6 +26,7 @@ test("default save state starts at level one with no records or drafts", () => {
   assert.deepEqual(DEFAULT_SAVE_STATE, {
     version: SAVE_VERSION,
     unlockedLevel: 1,
+    activeLevelId: 1,
     bestResults: {},
     drafts: {},
   });
@@ -36,6 +37,7 @@ test("save serializes and loads the versioned progress shape", () => {
   const state = {
     version: SAVE_VERSION,
     unlockedLevel: 3,
+    activeLevelId: 1,
     bestResults: { 1: { elapsed: 36.5, completed: 10 } },
     drafts: { 2: { devices: {}, connections: [] } },
   };
@@ -43,6 +45,20 @@ test("save serializes and loads the versioned progress shape", () => {
   saveGameSave(storage, state);
   assert.deepEqual(loadGameSave(storage), state);
   assert.deepEqual(parseGameSave(serializeGameSave(state)), state);
+});
+
+test("active level is retained only when it is unlocked and otherwise falls back to level one", () => {
+  const base = {
+    version: SAVE_VERSION,
+    unlockedLevel: 2,
+    activeLevelId: 1,
+    bestResults: {},
+    drafts: {},
+  };
+
+  assert.equal(parseGameSave(JSON.stringify({ ...base, activeLevelId: 2 })).activeLevelId, 2);
+  assert.equal(parseGameSave(JSON.stringify({ ...base, activeLevelId: 3 })).activeLevelId, 1);
+  assert.equal(parseGameSave(JSON.stringify({ ...base, activeLevelId: 0 })).activeLevelId, 1);
 });
 
 test("missing, malformed, incompatible, and corrupted saves fall back safely", () => {
@@ -100,6 +116,7 @@ test("uncloneable saves do not overwrite an existing valid save", () => {
   const valid = {
     version: SAVE_VERSION,
     unlockedLevel: 2,
+    activeLevelId: 1,
     bestResults: {},
     drafts: { 1: { devices: {}, connections: [] } },
   };

@@ -8,6 +8,7 @@ export function createDefaultSaveState() {
   return {
     version: SAVE_VERSION,
     unlockedLevel: 1,
+    activeLevelId: 1,
     bestResults: {},
     drafts: {},
   };
@@ -42,6 +43,22 @@ function isValidSaveState(value) {
   );
 }
 
+function normalizedActiveLevelId(activeLevelId, unlockedLevel) {
+  return Number.isInteger(activeLevelId) &&
+    activeLevelId >= 1 &&
+    activeLevelId <= unlockedLevel &&
+    activeLevelId <= 5
+    ? activeLevelId
+    : 1;
+}
+
+function normalizeSaveState(state) {
+  return {
+    ...state,
+    activeLevelId: normalizedActiveLevelId(state.activeLevelId, state.unlockedLevel),
+  };
+}
+
 function cloneOrNull(value) {
   try {
     return structuredClone(value);
@@ -55,7 +72,8 @@ export function parseGameSave(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (!isValidSaveState(parsed)) return createDefaultSaveState();
-    return cloneOrNull(parsed) ?? createDefaultSaveState();
+    const cloned = cloneOrNull(parsed);
+    return cloned ? normalizeSaveState(cloned) : createDefaultSaveState();
   } catch {
     return createDefaultSaveState();
   }
@@ -64,7 +82,7 @@ export function parseGameSave(raw) {
 export function serializeGameSave(state) {
   if (!isValidSaveState(state)) return JSON.stringify(createDefaultSaveState());
   try {
-    return JSON.stringify(state);
+    return JSON.stringify(normalizeSaveState(state));
   } catch {
     return JSON.stringify(createDefaultSaveState());
   }
@@ -92,7 +110,8 @@ export function loadGameSave(storage, key = SAVE_STORAGE_KEY) {
 export function saveGameSave(storage, state, key = SAVE_STORAGE_KEY) {
   const target = resolveStorage(storage);
   if (!isValidSaveState(state)) return createDefaultSaveState();
-  const next = cloneOrNull(state);
+  const cloned = cloneOrNull(state);
+  const next = cloned && normalizeSaveState(cloned);
   if (!next) return createDefaultSaveState();
   let serialized;
   try {

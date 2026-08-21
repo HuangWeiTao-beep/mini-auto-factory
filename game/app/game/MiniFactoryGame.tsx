@@ -37,8 +37,8 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
 ];
 
 export function MiniFactoryGame() {
-  const [initialSession] = useState(() => restoreGameSession(undefined, 1));
-  const [activeLevelId, setActiveLevelId] = useState(1);
+  const [initialSession] = useState(() => restoreGameSession(undefined));
+  const [activeLevelId, setActiveLevelId] = useState(initialSession.activeLevelId);
   const [unlockedLevel, setUnlockedLevel] = useState(initialSession.unlockedLevel);
   const [bestResults, setBestResults] = useState<Record<number, { elapsed: number; completed: number }>>(initialSession.bestResults);
   const [design, setDesign] = useState<FactoryDesign>(initialSession.design);

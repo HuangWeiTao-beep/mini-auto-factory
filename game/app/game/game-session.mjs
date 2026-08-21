@@ -7,10 +7,12 @@ export function recordBestResult(bestResults, levelId, result) {
   return { ...bestResults, [levelId]: result };
 }
 
-export function restoreGameSession(storage, activeLevelId = 1) {
+export function restoreGameSession(storage, selectedLevelId) {
   const save = loadGameSave(storage);
+  const activeLevelId = selectedLevelId ?? save.activeLevelId;
   const design = save.drafts[activeLevelId] ?? createEmptyDesign();
   return {
+    activeLevelId,
     unlockedLevel: save.unlockedLevel,
     bestResults: save.bestResults,
     design,
@@ -26,6 +28,7 @@ export function saveGameSession(storage, session) {
   return saveGameSave(storage, {
     version: previous.version,
     unlockedLevel: session.unlockedLevel,
+    activeLevelId: session.activeLevelId,
     bestResults: session.bestResults,
     drafts,
   });

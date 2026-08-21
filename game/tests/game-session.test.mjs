@@ -62,6 +62,7 @@ test("saving a running production state preserves the last non-running layout dr
   assert.deepEqual(loadGameSave(storage), {
     version: SAVE_VERSION,
     unlockedLevel: 2,
+    activeLevelId: 1,
     bestResults: { 1: { elapsed: 40, completed: 10 } },
     drafts: { 1: previousDraft },
   });
@@ -79,7 +80,14 @@ test("saving a paused layout makes that layout available after a refresh", () =>
     state: pausedState,
   });
 
-  assert.deepEqual(restoreGameSession(storage, 2).design, draft);
+  const refreshed = restoreGameSession(storage);
+  assert.equal(refreshed.activeLevelId, 2);
+  assert.deepEqual(refreshed.design, draft);
+});
+
+test("session recovery remains safe without a storage implementation", () => {
+  assert.doesNotThrow(() => restoreGameSession(undefined));
+  assert.equal(restoreGameSession(undefined).activeLevelId, 1);
 });
 
 test("a faster successful run replaces the best result while a slower run does not", () => {

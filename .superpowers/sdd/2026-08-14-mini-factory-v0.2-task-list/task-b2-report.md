@@ -24,4 +24,18 @@
 
 ## Notes
 
-- The save schema intentionally remains B1-compatible; it stores unlock progress, best results, and drafts. It does not introduce a separate persisted “last selected level” field, so the initial session opens level 1 and restores the matching level-1 draft; subsequent selected levels restore their own drafts.
+- The initial implementation was subsequently corrected by the review follow-up below to persist and restore the last selected level alongside unlock progress, best results, and drafts.
+
+## Review follow-up — active level recovery
+
+- Added `activeLevelId` to the versioned save state. New saves persist the selected level, and recovery validates that it is an existing chapter level, at least 1, and no higher than `unlockedLevel`; invalid, missing, or out-of-range values normalize to level 1 without discarding otherwise valid progress.
+- Session restoration now defaults to the persisted active level, while an explicit level selection still restores that selected level's draft. `MiniFactoryGame` initializes both its active level and its design/state from the restored session.
+- Added boundary behavior coverage for saving a paused level-2 draft and recovering a new session at level 2 with that exact design, plus storage-less recovery that does not throw and uses level 1.
+
+### Follow-up TDD evidence and verification
+
+1. The new session-recovery assertions first failed because no `activeLevelId` was restored; the new storage validation assertion first failed because an active level above the unlock level was accepted.
+2. Added normalizing storage validation and session/component recovery behavior; focused tests then passed.
+3. `node --test tests/game-session.test.mjs tests/game-save.test.mjs` — 12 passed.
+4. `npm test` — build completed and 62 tests passed.
+5. `npm run lint` — exit 0; `git diff --check` — exit 0.

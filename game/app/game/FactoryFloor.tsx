@@ -1,7 +1,7 @@
 import type { DragEvent, RefObject } from "react";
 import { MATERIALS, getTransportDuration, outgoing } from "./factory-model.mjs";
 import type { FactoryDesign, GridCell, LevelConfig, ProductionState } from "./factory-model.mjs";
-import { GRID } from "./factory-grid.mjs";
+import { GRID, MACHINE } from "./factory-grid.mjs";
 import { MachineCard } from "./MachineCard";
 
 type Props = {
@@ -18,11 +18,21 @@ type Props = {
   onRemoveConnection: (id: string) => void;
 };
 
-const size = { width: 178, height: 154 };
-
 function curve(fromX: number, fromY: number, toX: number, toY: number) {
   const bend = Math.max(54, Math.abs(toX - fromX) * 0.45);
   return `M ${fromX} ${fromY} C ${fromX + bend} ${fromY}, ${toX - bend} ${toY}, ${toX} ${toY}`;
+}
+
+function connectionGeometry(from: GridCell, to: GridCell) {
+  const x1 = from.gridX * GRID.cellSize + MACHINE.width;
+  const y1 = from.gridY * GRID.cellSize + MACHINE.portY;
+  const x2 = to.gridX * GRID.cellSize;
+  const y2 = to.gridY * GRID.cellSize + MACHINE.portY;
+  return {
+    d: curve(x1, y1, x2, y2),
+    labelX: (x1 + x2) / 2,
+    labelY: (y1 + y2) / 2,
+  };
 }
 
 function gridStyle(cell: GridCell) {
@@ -85,15 +95,7 @@ export function FactoryFloor({
           const to = design.devices[connection.to];
           const line = state.lines[connection.id];
           if (!from || !to) return null;
-          const x1 = from.gridX * GRID.cellSize + size.width;
-          const y1 = from.gridY * GRID.cellSize + 80;
-          const x2 = to.gridX * GRID.cellSize;
-          const y2 = to.gridY * GRID.cellSize + 80;
-          const d = curve(x1, y1, x2, y2);
-          const labelX = (x1 + x2) / 2;
-          const labelY = (y1 + y2) / 2;
-          const transportDuration = line?.item?.transportDuration
-            ?? getTransportDuration(level, from, to);
+          const { d, labelX, labelY } = connectionGeometry(from, to);
           const showsBranchLabel = outgoing(design, connection.from).length > 1;
           return (
             <g key={connection.id}>
@@ -104,14 +106,6 @@ export function FactoryFloor({
                   <circle r="11" />
                   <text className="connection-branch" textAnchor="middle" dominantBaseline="central">
                     {String.fromCharCode(65 + connection.branchIndex)}
-                  </text>
-                </g>
-              )}
-              {level.transportMode === "distance" && (
-                <g className="connection-duration-label" transform={`translate(${labelX} ${labelY + 15})`}>
-                  <rect x="-23" y="-9" width="46" height="18" rx="3" />
-                  <text className="connection-duration" textAnchor="middle" dominantBaseline="central">
-                    {transportDuration.toFixed(1)}s
                   </text>
                 </g>
               )}
@@ -139,6 +133,30 @@ export function FactoryFloor({
           onDragStart={onMoveStart}
         />
       ))}
+
+      {level.transportMode === "distance" && (
+        <div className="connection-label-layer" aria-hidden="true">
+          {design.connections.map((connection) => {
+            const from = design.devices[connection.from];
+            const to = design.devices[connection.to];
+            if (!from || !to) return null;
+            const line = state.lines[connection.id];
+            const { labelX, labelY } = connectionGeometry(from, to);
+            const showsBranchLabel = outgoing(design, connection.from).length > 1;
+            const transportDuration = line?.item?.transportDuration
+              ?? getTransportDuration(level, from, to);
+            return (
+              <span
+                key={connection.id}
+                className="connection-duration-label"
+                style={{ left: labelX, top: labelY - (showsBranchLabel ? 42 : 16) }}
+              >
+                {transportDuration.toFixed(1)}s
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {connectingFrom && !locked && (
         <div className="connection-tip">选择一个蓝色输入端口完成连线 · ESC 取消</div>

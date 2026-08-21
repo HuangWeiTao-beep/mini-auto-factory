@@ -21,25 +21,27 @@ test("the game exposes all machines and production controls", async () => {
 });
 
 test("the game source exposes chapter selection, drilling and level-aware targets", async () => {
-  const [source, levelSelect] = await Promise.all([
+  const [source, levelSelect, sessionHook] = await Promise.all([
     readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/useGameSession.ts", import.meta.url), "utf8"),
   ]);
   assert.match(source, /LevelSelectModal/);
   assert.match(source, /钻孔机/);
   assert.match(source, /unlockedLevel/);
-  assert.match(source, /LEVELS/);
+  assert.match(sessionHook, /LEVELS/);
   assert.match(source, /disabled=\{locked\}/);
   assert.match(levelSelect, /尚未解锁/);
 });
 
 test("the interaction layer includes drag, connection, warning and settlement flows", async () => {
-  const [game, floor, machine] = await Promise.all([
+  const [game, floor, machine, sessionHook] = await Promise.all([
     readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game/FactoryFloor.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/game/MachineCard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/useGameSession.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(game, /requestAnimationFrame/);
+  assert.match(sessionHook, /requestAnimationFrame/);
   assert.match(game, /平均产量/);
   assert.match(game, /返回关卡选择/);
   assert.match(floor, /onDrop/);
@@ -61,6 +63,22 @@ test("the floor source renders obstacles, branch labels and transport duration",
   assert.doesNotMatch(floor, /const showsBranchLabel = level\.id === 3 \|\| level\.id === 5/);
 });
 
+test("distance duration labels stay visible above compact machine cards", async () => {
+  const [floor, styles] = await Promise.all([
+    readFile(new URL("../app/game/FactoryFloor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/game.css", import.meta.url), "utf8"),
+  ]);
+  const machineRule = styles.match(/\.machine\s*\{([^}]*)\}/)?.[1] ?? "";
+  const labelLayerRule = styles.match(/\.connection-label-layer\s*\{([^}]*)\}/)?.[1] ?? "";
+
+  assert.match(floor, /className="connection-label-layer"/);
+  assert.match(floor, /className="connection-duration-label"/);
+  assert.doesNotMatch(floor, /<g className="connection-duration-label"/);
+  assert.equal(Number(machineRule.match(/width:\s*(\d+)px/)?.[1]), 154);
+  assert.equal(Number(machineRule.match(/min-height:\s*(\d+)px/)?.[1]), 132);
+  assert.equal(Number(labelLayerRule.match(/z-index:\s*(\d+)/)?.[1]) > 3, true);
+});
+
 test("the feedback bar distinguishes quality, blocked targets and routing waits", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
@@ -69,6 +87,36 @@ test("the feedback bar distinguishes quality, blocked targets and routing waits"
   assert.match(game, /质量拒收/);
   assert.match(game, /目标设备阻塞/);
   assert.match(game, /分支 .* 正在等待/);
+});
+
+test("capacity and routing feedback tells the player what action to take next", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /加工位与等待位已满，物料停在线上。请暂停后检查下游节拍或调整布局。/);
+  assert.match(game, /轮到的线路被占用，物料保留且不会跳过。请等待支路清空，或暂停后调整支路负载。/);
+});
+
+test("critical controls keep keyboard cancellation, modal focus and running-state locks", async () => {
+  const [game, levelSelect, floor, machine] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/FactoryFloor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/MachineCard.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(game, /event\.key === "Escape"\) setConnectingFrom\(null\)/);
+  assert.match(game, /role="status" aria-live="polite"/);
+  assert.match(game, /role="dialog" aria-modal="true" aria-labelledby="onboarding-title"/);
+  assert.match(game, /role="dialog" aria-modal="true" aria-labelledby="settlement-title"/);
+  assert.match(game, /autoFocus/);
+  assert.match(levelSelect, /role="dialog" aria-modal="true" aria-labelledby="level-select-title"/);
+  assert.match(levelSelect, /aria-label="关闭关卡选择"[^>]*autoFocus/);
+  assert.match(floor, /ESC 取消/);
+  assert.match(machine, /draggable=\{!locked\}/);
+  assert.match(machine, /disabled=\{locked\}/);
 });
 
 test("settlement copy follows the active level and level five has no next-level action", async () => {
@@ -84,6 +132,21 @@ test("settlement copy follows the active level and level five has no next-level 
   assert.match(game, /state\.mode === "success" && hasNextLevel/);
 });
 
+test("completed levels expose their best time and success settlement calls out a new record", async () => {
+  const [game, levelSelect, session] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/game-session.mjs", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(levelSelect, /bestResults/);
+  assert.match(levelSelect, /最佳纪录/);
+  assert.match(levelSelect, /bestResult\.elapsed\.toFixed\(1\)/);
+  assert.match(game, /bestResults=\{bestResults\}/);
+  assert.match(game, /本次刷新纪录/);
+  assert.match(session, /recordBestResult\(session\.bestResults, session\.activeLevelId/);
+});
+
 test("failure settlement consumes the direct diagnostic policy before the route fallback", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
@@ -94,14 +157,14 @@ test("failure settlement consumes the direct diagnostic policy before the route 
 });
 
 test("successful paused design edits flow into the restart-production action label", async () => {
-  const game = await readFile(
-    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
-    "utf8",
-  );
+  const [game, session] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/game-session.mjs", import.meta.url), "utf8"),
+  ]);
 
-  assert.match(game, /markDesignEdited\(\s*state\.mode,\s*edited,\s*design,\s*next,?\s*\)/);
+  assert.match(session, /markDesignEdited\(\s*session\.state\.mode,\s*session\.editedWhilePaused,\s*session\.design,\s*nextDesign,?\s*\)/);
   assert.match(game, /getProductionActionLabel\(state\.mode, editedWhilePaused\)/);
-  assert.match(game, /startProduction\(current, \{ edited: editedWhilePaused, design, level \}\)/);
+  assert.match(session, /startProduction\(session\.state, \{\s*edited: session\.editedWhilePaused,\s*design: session\.design,\s*level,?\s*\}\)/);
 });
 
 test("obstacles stay above overlapping adjacent machine footprints", async () => {

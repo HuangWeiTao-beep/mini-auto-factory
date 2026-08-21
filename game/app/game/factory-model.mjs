@@ -16,6 +16,8 @@ export const MATERIALS = {
 };
 
 import {
+  GRID,
+  MACHINE,
   isObstaclePlacement,
   manhattanDistance,
   snapToGrid,
@@ -78,7 +80,7 @@ export const LEVELS = Object.freeze({
     id: 4,
     name: "有限工位",
     routeHint: "避开障碍，缩短关键连接",
-    duration: 50,
+    duration: 48,
     target: 10,
     deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, exit: 1 },
     transportMode: "distance",
@@ -96,7 +98,7 @@ export const LEVELS = Object.freeze({
     id: 5,
     name: "工坊验收",
     routeHint: "两条紧凑支路汇入成品出口",
-    duration: 40,
+    duration: 36,
     target: 14,
     deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, exit: 1 },
     transportMode: "distance",
@@ -167,8 +169,8 @@ export function canPlaceDevice(design, level, cell, ignoredDeviceId = null) {
   return !Object.values(design.devices).some(
     (device) =>
       device.id !== ignoredDeviceId &&
-      device.gridX === cell.gridX &&
-      device.gridY === cell.gridY,
+      Math.abs(device.gridX - cell.gridX) * GRID.cellSize < MACHINE.width &&
+      Math.abs(device.gridY - cell.gridY) * GRID.cellSize < MACHINE.height,
   );
 }
 

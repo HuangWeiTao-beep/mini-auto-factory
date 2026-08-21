@@ -4,27 +4,21 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import {
   DEVICE_TYPES,
-  LEVELS,
   addDevice,
-  advanceProduction,
   canPlaceDevice,
   connectDevices,
-  createEmptyDesign,
-  createProductionState,
   getDeviceLimit,
   moveDevice,
-  nextUnlockedLevel,
   outgoing,
-  pauseProduction,
   removeConnection,
-  startProduction,
 } from "./factory-model.mjs";
-import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
-import { snapToGrid } from "./factory-grid.mjs";
+import type { DeviceType } from "./factory-model.mjs";
+import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
-import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
+import { getProductionActionLabel } from "./production-controls.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
+import { useGameSession } from "./useGameSession";
 import "./game.css";
 
 const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: string }> = [
@@ -35,25 +29,33 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
   { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
 ];
 
-const starterDesign = () => createEmptyDesign();
-
 export function MiniFactoryGame() {
-  const [activeLevelId, setActiveLevelId] = useState(1);
-  const [unlockedLevel, setUnlockedLevel] = useState(1);
-  const [design, setDesign] = useState<FactoryDesign>(starterDesign);
-  const [state, setState] = useState<ProductionState>(() => createProductionState(starterDesign()));
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
-  const [editedWhilePaused, setEditedWhilePaused] = useState(false);
   const [showLevelSelect, setShowLevelSelect] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showClearProgressConfirm, setShowClearProgressConfirm] = useState(false);
   const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
-  const frameRef = useRef<number | null>(null);
-  const previousTime = useRef<number | null>(null);
-  const designRef = useRef(design);
-  const stateRef = useRef(state);
+  const handleSessionRestore = useCallback((restored: { activeLevelId: number }) => {
+    setShowOnboarding(restored.activeLevelId === 1);
+  }, []);
+  const {
+    activeLevelId,
+    unlockedLevel,
+    bestResults,
+    recordBroken,
+    design,
+    state,
+    editedWhilePaused,
+    level,
+    mutateDesign,
+    start,
+    pause,
+    reset,
+    selectLevel: selectSessionLevel,
+    clearProgress,
+  } = useGameSession({ onRestored: handleSessionRestore });
 
-  const level = LEVELS[activeLevelId];
   const palette = paletteDefinitions
     .filter((item) => getDeviceLimit(level, item.type) > 0)
     .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
@@ -62,8 +64,9 @@ export function MiniFactoryGame() {
   const remaining = Math.max(0, level.duration - state.elapsed);
   const completion = (state.completed / level.target) * 100;
   const hasNextLevel = activeLevelId < 5;
+  const activeBestResult = bestResults[activeLevelId];
   const settlementOpen = state.mode === "success" || state.mode === "failure";
-  const overlayOpen = showLevelSelect || showOnboarding || settlementOpen;
+  const overlayOpen = showLevelSelect || showOnboarding || settlementOpen || showClearProgressConfirm;
   const blockedLine = Object.values(state.lines).find(
     (line) => line.item?.status === "blocked" || line.item?.status === "waiting",
   );
@@ -88,14 +91,14 @@ export function MiniFactoryGame() {
           tone: blockedLine.item?.status === "blocked" ? "warning" : "wait",
           message: blockedLine.item?.status === "blocked"
             ? `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 无法接收当前物料。${state.warning ?? "请检查前置工序。"}`
-            : `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 的加工位与等待位已满，物料停在线上。`,
+            : `目标设备阻塞：${blockedTarget ? DEVICE_TYPES[blockedTarget.type].label : "下游设备"} 的加工位与等待位已满，物料停在线上。请暂停后检查下游节拍或调整布局。`,
         }
       : state.warning
         ? { tone: "warning", message: `目标设备阻塞：${state.warning}` }
         : routingWaitConnection
           ? {
               tone: "wait",
-              message: `分支 ${String.fromCharCode(65 + routingWaitConnection.branchIndex)} 正在等待：轮到的线路被占用，物料保留且不会跳过。`,
+              message: `分支 ${String.fromCharCode(65 + routingWaitConnection.branchIndex)} 正在等待：轮到的线路被占用，物料保留且不会跳过。请等待支路清空，或暂停后调整支路负载。`,
             }
           : null;
   const visibleFeedback = state.mode === "running" ? contextualFeedback : null;
@@ -113,29 +116,6 @@ export function MiniFactoryGame() {
   );
   const productionActionLabel = getProductionActionLabel(state.mode, editedWhilePaused);
 
-  const mutateDesign = useCallback((mutation: (current: FactoryDesign) => FactoryDesign) => {
-    const next = mutation(design);
-    if (next === design) return;
-    setDesign(next);
-    setEditedWhilePaused((edited) => markDesignEdited(
-      state.mode,
-      edited,
-      design,
-      next,
-    ));
-    if (state.mode !== "paused") {
-      setState(createProductionState(next));
-    }
-  }, [design, state.mode]);
-
-  useEffect(() => {
-    designRef.current = design;
-  }, [design]);
-
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
   useEffect(() => {
     const cancel = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConnectingFrom(null);
@@ -143,31 +123,6 @@ export function MiniFactoryGame() {
     window.addEventListener("keydown", cancel);
     return () => window.removeEventListener("keydown", cancel);
   }, []);
-
-  useEffect(() => {
-    if (state.mode !== "running") {
-      previousTime.current = null;
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      return;
-    }
-    const loop = (time: number) => {
-      const previous = previousTime.current ?? time;
-      previousTime.current = time;
-      const delta = Math.min(0.1, (time - previous) / 1000);
-      const current = stateRef.current;
-      const next = advanceProduction(current, designRef.current, level, delta);
-      stateRef.current = next;
-      setState(next);
-      if (current.mode !== "success" && next.mode === "success") {
-        setUnlockedLevel((unlocked) => nextUnlockedLevel(unlocked, level.id));
-      }
-      frameRef.current = requestAnimationFrame(loop);
-    };
-    frameRef.current = requestAnimationFrame(loop);
-    return () => {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-    };
-  }, [level, state.mode]);
 
   const beginPaletteDrag = (event: DragEvent<HTMLElement>, type: DeviceType) => {
     event.dataTransfer.setData("application/x-factory-palette", type);
@@ -183,8 +138,8 @@ export function MiniFactoryGame() {
     event.preventDefault();
     if (locked || !floorRef.current) return;
     const bounds = floorRef.current.getBoundingClientRect();
-    const x = Math.max(10, Math.min(bounds.width - 188, event.clientX - bounds.left - 89));
-    const y = Math.max(54, Math.min(bounds.height - 166, event.clientY - bounds.top - 77));
+    const x = Math.max(10, Math.min(bounds.width - (MACHINE.width + 10), event.clientX - bounds.left - MACHINE.width / 2));
+    const y = Math.max(54, Math.min(bounds.height - (MACHINE.height + 12), event.clientY - bounds.top - MACHINE.height / 2));
     const cell = snapToGrid(x, y);
     const type = event.dataTransfer.getData("application/x-factory-palette") as DeviceType;
     const id = event.dataTransfer.getData("application/x-factory-device");
@@ -195,14 +150,14 @@ export function MiniFactoryGame() {
         return;
       }
       if (!canPlaceDevice(design, level, cell)) {
-        setToast("这个网格被障碍或其他设备占用，请换一格。 ");
+        setToast("这个位置会与障碍或其他设备重叠，请换一格。 ");
         return;
       }
       mutateDesign((current) => addDevice(current, type, x, y));
       setToast(`${DEVICE_TYPES[type].label}已放置。`);
     } else if (id) {
       if (!canPlaceDevice(design, level, cell, id)) {
-        setToast("这个网格被障碍或其他设备占用，设备拒绝叠罗汉。 ");
+        setToast("这个位置会与障碍或其他设备重叠，设备拒绝叠罗汉。 ");
         return;
       }
       mutateDesign((current) => moveDevice(current, id, x, y));
@@ -229,22 +184,18 @@ export function MiniFactoryGame() {
       return;
     }
     setConnectingFrom(null);
-    setState((current) => startProduction(current, { edited: editedWhilePaused, design, level }));
-    setEditedWhilePaused(false);
+    start();
     setToast(editedWhilePaused ? "设计已更新，本轮生产从零开始。" : "产线启动，布局已锁定。");
   };
 
   const handlePause = () => {
-    setState((current) => pauseProduction(current));
+    pause();
     setToast("生产已暂停。现在可以调整设备和连线。 ");
   };
 
   const resetAttempt = (keepDesign: boolean) => {
-    const nextDesign = keepDesign ? design : createEmptyDesign();
-    setDesign(nextDesign);
-    setState(createProductionState(nextDesign));
+    reset(keepDesign);
     setConnectingFrom(null);
-    setEditedWhilePaused(false);
     setToast(keepDesign ? "生产状态已清空，设备和连线为你保留。" : "画布已清空，重新设计吧。 ");
   };
 
@@ -267,6 +218,17 @@ export function MiniFactoryGame() {
     setShowLevelSelect(true);
   };
 
+  const handleClearProgressDecision = (confirmed: boolean) => {
+    setShowClearProgressConfirm(false);
+    if (!confirmed) return;
+
+    clearProgress();
+    setConnectingFrom(null);
+    setShowLevelSelect(false);
+    setShowOnboarding(true);
+    setToast("本地进度已清除，已回到第 1 关。");
+  };
+
   const paletteDetail = (type: DeviceType) => {
     if (type === "source") return `每 ${level.sourceInterval} 秒生成长钢棒`;
     if (type === "cutter") return `${level.machineDurations.cutter} 秒 · 钢棒变短料`;
@@ -276,16 +238,11 @@ export function MiniFactoryGame() {
   };
 
   const selectLevel = (levelId: number) => {
-    if (!LEVELS[levelId] || levelId > unlockedLevel) {
+    if (!selectSessionLevel(levelId)) {
       setToast("这一关还锁着。先把前一关收拾明白。 ");
       return;
     }
-    const nextDesign = createEmptyDesign();
-    setActiveLevelId(levelId);
-    setDesign(nextDesign);
-    setState(createProductionState(nextDesign));
     setConnectingFrom(null);
-    setEditedWhilePaused(false);
     setShowLevelSelect(false);
     setShowOnboarding(levelId === 1);
     setToast(`第 ${levelId} 关已载入。先摆设备，再连产线。`);
@@ -313,6 +270,9 @@ export function MiniFactoryGame() {
               <span aria-hidden="true">?</span>玩法
             </button>
           )}
+          <button className="clear-progress-control" type="button" aria-label="清除本地进度" onClick={() => setShowClearProgressConfirm(true)}>
+            <span aria-hidden="true">×</span>清除进度
+          </button>
         </div>
       </header>
 
@@ -421,6 +381,12 @@ export function MiniFactoryGame() {
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>
               <div><small>平均产量</small><strong>{averageOutput} 件/分钟</strong></div>
             </div>
+            {state.mode === "success" && recordBroken && (
+              <p className="settlement-record-feedback" role="status" aria-live="polite">🏆 本次刷新纪录</p>
+            )}
+            {state.mode === "success" && activeBestResult && (
+              <p className="settlement-best-result">最佳纪录 <strong>{activeBestResult.elapsed.toFixed(1)} 秒</strong></p>
+            )}
             <div className="settlement-actions">
               <button className="settlement-primary" onClick={() => resetAttempt(true)} autoFocus>重新挑战</button>
               {state.mode === "success" && hasNextLevel && (
@@ -436,9 +402,25 @@ export function MiniFactoryGame() {
         <LevelSelectModal
           unlockedLevel={unlockedLevel}
           activeLevel={activeLevelId}
+          bestResults={bestResults}
           onSelect={selectLevel}
           onClose={() => setShowLevelSelect(false)}
         />
+      )}
+
+      {showClearProgressConfirm && (
+        <div className="settlement-backdrop" role="dialog" aria-modal="true" aria-labelledby="clear-progress-title">
+          <section className="settlement-card settlement-card--failure clear-progress-card">
+            <span className="settlement-kicker">LOCAL PROGRESS</span>
+            <div className="settlement-icon">!</div>
+            <h2 id="clear-progress-title">清除本地进度？</h2>
+            <p>关卡解锁、最佳纪录和当前布局都会删除，并回到第 1 关。这个按钮不负责后悔药。</p>
+            <div className="settlement-actions">
+              <button type="button" onClick={() => handleClearProgressDecision(false)} autoFocus>取消</button>
+              <button className="clear-progress-confirm" type="button" onClick={() => handleClearProgressDecision(true)}>确认清除</button>
+            </div>
+          </section>
+        </div>
       )}
     </main>
   );

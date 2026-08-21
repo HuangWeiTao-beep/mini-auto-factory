@@ -195,14 +195,14 @@ export function MiniFactoryGame() {
         return;
       }
       if (!canPlaceDevice(design, level, cell)) {
-        setToast("这个网格被障碍或其他设备占用，请换一格。 ");
+        setToast("这个位置会与障碍或其他设备重叠，请换一格。 ");
         return;
       }
       mutateDesign((current) => addDevice(current, type, x, y));
       setToast(`${DEVICE_TYPES[type].label}已放置。`);
     } else if (id) {
       if (!canPlaceDevice(design, level, cell, id)) {
-        setToast("这个网格被障碍或其他设备占用，设备拒绝叠罗汉。 ");
+        setToast("这个位置会与障碍或其他设备重叠，设备拒绝叠罗汉。 ");
         return;
       }
       mutateDesign((current) => moveDevice(current, id, x, y));

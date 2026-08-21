@@ -174,8 +174,8 @@ function assertPlayerReachableLayout(design, level) {
   for (const [index, device] of devices.entries()) {
     for (const other of devices.slice(index + 1)) {
       const overlaps =
-        Math.abs(device.gridX - other.gridX) * 36 < 178 &&
-        Math.abs(device.gridY - other.gridY) * 36 < 154;
+        Math.abs(device.gridX - other.gridX) * 36 < 154 &&
+        Math.abs(device.gridY - other.gridY) * 36 < 132;
       assert.equal(overlaps, false, `${device.id} and ${other.id} must not overlap`);
     }
   }

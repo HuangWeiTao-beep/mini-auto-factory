@@ -20,7 +20,7 @@ import {
   startProduction,
 } from "./factory-model.mjs";
 import type { DeviceType, FactoryDesign, ProductionState } from "./factory-model.mjs";
-import { snapToGrid } from "./factory-grid.mjs";
+import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, markDesignEdited } from "./production-controls.mjs";
 import { FactoryFloor } from "./FactoryFloor";
@@ -183,8 +183,8 @@ export function MiniFactoryGame() {
     event.preventDefault();
     if (locked || !floorRef.current) return;
     const bounds = floorRef.current.getBoundingClientRect();
-    const x = Math.max(10, Math.min(bounds.width - 188, event.clientX - bounds.left - 89));
-    const y = Math.max(54, Math.min(bounds.height - 166, event.clientY - bounds.top - 77));
+    const x = Math.max(10, Math.min(bounds.width - (MACHINE.width + 10), event.clientX - bounds.left - MACHINE.width / 2));
+    const y = Math.max(54, Math.min(bounds.height - (MACHINE.height + 12), event.clientY - bounds.top - MACHINE.height / 2));
     const cell = snapToGrid(x, y);
     const type = event.dataTransfer.getData("application/x-factory-palette") as DeviceType;
     const id = event.dataTransfer.getData("application/x-factory-device");

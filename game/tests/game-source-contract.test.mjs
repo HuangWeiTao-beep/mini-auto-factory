@@ -61,6 +61,22 @@ test("the floor source renders obstacles, branch labels and transport duration",
   assert.doesNotMatch(floor, /const showsBranchLabel = level\.id === 3 \|\| level\.id === 5/);
 });
 
+test("distance duration labels stay visible above compact machine cards", async () => {
+  const [floor, styles] = await Promise.all([
+    readFile(new URL("../app/game/FactoryFloor.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/game.css", import.meta.url), "utf8"),
+  ]);
+  const machineRule = styles.match(/\.machine\s*\{([^}]*)\}/)?.[1] ?? "";
+  const labelLayerRule = styles.match(/\.connection-label-layer\s*\{([^}]*)\}/)?.[1] ?? "";
+
+  assert.match(floor, /className="connection-label-layer"/);
+  assert.match(floor, /className="connection-duration-label"/);
+  assert.doesNotMatch(floor, /<g className="connection-duration-label"/);
+  assert.equal(Number(machineRule.match(/width:\s*(\d+)px/)?.[1]), 154);
+  assert.equal(Number(machineRule.match(/min-height:\s*(\d+)px/)?.[1]), 132);
+  assert.equal(Number(labelLayerRule.match(/z-index:\s*(\d+)/)?.[1]) > 3, true);
+});
+
 test("the feedback bar distinguishes quality, blocked targets and routing waits", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),

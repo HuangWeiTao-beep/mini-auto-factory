@@ -1,0 +1,233 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  LEVELS,
+  getAllowedPaletteTypes,
+  isOrderSchedulingLevel,
+} from "../app/game/factory-model.mjs";
+import {
+  PRODUCTS,
+  activateArrivedOrders,
+  createOrderScenario,
+  createSeededRandom,
+  enqueueWaitingOrder,
+  getProduct,
+  moveQueuedOrder,
+  shufflePaletteTypes,
+} from "../app/game/order-scheduling.mjs";
+
+const FIXED_LEVEL_SEEDS = Object.freeze({
+  6: 1606,
+  7: 1707,
+  8: 1808,
+  9: 1909,
+  10: 2010,
+});
+
+function summarizeScenario(scenario) {
+  return {
+    paletteTypes: scenario.paletteTypes,
+    orders: scenario.orders.map((order) => ({
+      id: order.id,
+      productId: order.productId,
+      arrivesAt: order.arrivesAt,
+      deadlineAt: order.deadlineAt,
+      status: order.status,
+    })),
+  };
+}
+
+test("seeded random produces a stable deterministic number stream", () => {
+  const a = createSeededRandom("L6:1606");
+  const b = createSeededRandom("L6:1606");
+  const c = createSeededRandom("L6:1607");
+
+  const sampleA = [a(), a(), a()].map((value) => Number(value.toFixed(6)));
+  const sampleB = [b(), b(), b()].map((value) => Number(value.toFixed(6)));
+  const sampleC = [c(), c(), c()].map((value) => Number(value.toFixed(6)));
+
+  assert.deepEqual(sampleA, sampleB);
+  assert.notDeepEqual(sampleA, sampleC);
+});
+
+test("product catalog exposes the three chapter-two recipes", () => {
+  assert.deepEqual(Object.keys(PRODUCTS), ["standard", "precision", "rustproof"]);
+  assert.deepEqual(getProduct("rustproof"), {
+    id: "rustproof",
+    label: "防锈螺栓",
+    ariaLabel: "防锈螺栓订单",
+    colorToken: "order-rustproof",
+    route: ["source", "cutter", "lathe", "coater", "exit"],
+  });
+});
+
+test("palette shuffle is deterministic and preserves the allowed machine set", () => {
+  const allowed = getAllowedPaletteTypes(LEVELS[8]);
+  const first = shufflePaletteTypes(allowed, "L8:1808");
+  const second = shufflePaletteTypes(allowed, "L8:1808");
+  const third = shufflePaletteTypes(allowed, "L8:1809");
+
+  assert.deepEqual(first, second);
+  assert.notDeepEqual(first, third);
+  assert.deepEqual([...first].sort(), [...allowed].sort());
+});
+
+test("same level plus seed yields the same scenario while a different seed changes the attempt", () => {
+  const first = createOrderScenario(6, FIXED_LEVEL_SEEDS[6]);
+  const same = createOrderScenario(6, FIXED_LEVEL_SEEDS[6]);
+  const different = createOrderScenario(6, FIXED_LEVEL_SEEDS[6] + 1);
+
+  assert.deepEqual(first, same);
+  assert.notDeepEqual(summarizeScenario(first), summarizeScenario(different));
+});
+
+test("arrived orders flip from scheduled to waiting and can be queued and reordered immutably", () => {
+  const beforeArrival = createOrderScenario(6, FIXED_LEVEL_SEEDS[6]);
+  const activated = activateArrivedOrders(beforeArrival, 18);
+  const firstWaitingOrder = activated.orders.find((order) => order.status === "waiting");
+
+  assert.equal(beforeArrival.orders.every((order) => order.status === "scheduled"), true);
+  assert.ok(firstWaitingOrder);
+
+  const queuedOnce = enqueueWaitingOrder(activated, firstWaitingOrder.id);
+  const queuedTwice = enqueueWaitingOrder(queuedOnce, firstWaitingOrder.id);
+
+  assert.equal(queuedOnce.queue.length, 1);
+  assert.deepEqual(queuedOnce.queue, [firstWaitingOrder.id]);
+  assert.equal(
+    queuedOnce.orders.find((order) => order.id === firstWaitingOrder.id)?.status,
+    "queued",
+  );
+  assert.equal(queuedTwice.queue.length, 1);
+
+  const anotherWaiting = queuedOnce.orders.find(
+    (order) => order.status === "waiting" && order.id !== firstWaitingOrder.id,
+  );
+  const queuedTwo = enqueueWaitingOrder(queuedOnce, anotherWaiting.id);
+  const moved = moveQueuedOrder(queuedTwo, anotherWaiting.id, 0);
+
+  assert.deepEqual(queuedTwo.queue, [firstWaitingOrder.id, anotherWaiting.id]);
+  assert.deepEqual(moved.queue, [anotherWaiting.id, firstWaitingOrder.id]);
+  assert.deepEqual(queuedTwo.queue, [firstWaitingOrder.id, anotherWaiting.id]);
+});
+
+test("chapter-two level helpers identify order scheduling stages", () => {
+  assert.equal(isOrderSchedulingLevel(LEVELS[5]), false);
+  assert.equal(isOrderSchedulingLevel(LEVELS[6]), true);
+  assert.equal(isOrderSchedulingLevel(10), true);
+});
+
+test("fixed seeds lock the chapter-two order table design", () => {
+  const summaries = [6, 7, 8, 9, 10].map((levelId) => {
+    const scenario = createOrderScenario(levelId, FIXED_LEVEL_SEEDS[levelId]);
+    return {
+      levelId,
+      orderCount: scenario.orders.length,
+      paletteTypes: scenario.paletteTypes,
+      products: [...new Set(scenario.orders.map((order) => order.productId))],
+      arrivalWindow: [
+        Math.min(...scenario.orders.map((order) => order.arrivesAt)),
+        Math.max(...scenario.orders.map((order) => order.arrivesAt)),
+      ],
+      orders: scenario.orders.map((order) => ({
+        id: order.id,
+        productId: order.productId,
+        arrivesAt: order.arrivesAt,
+        deadlineAt: order.deadlineAt,
+      })),
+    };
+  });
+
+  assert.deepEqual(summaries, [
+    {
+      levelId: 6,
+      orderCount: 4,
+      paletteTypes: ["lathe", "source", "cutter", "drill", "exit"],
+      products: ["standard", "precision"],
+      arrivalWindow: [8, 21],
+      orders: [
+        { id: "L6-01", productId: "standard", arrivesAt: 8, deadlineAt: 28 },
+        { id: "L6-02", productId: "standard", arrivesAt: 11, deadlineAt: 23 },
+        { id: "L6-03", productId: "precision", arrivesAt: 17, deadlineAt: 36 },
+        { id: "L6-04", productId: "precision", arrivesAt: 21, deadlineAt: 38 },
+      ],
+    },
+    {
+      levelId: 7,
+      orderCount: 5,
+      paletteTypes: ["cutter", "drill", "lathe", "source", "exit"],
+      products: ["precision", "standard"],
+      arrivalWindow: [3, 30],
+      orders: [
+        { id: "L7-01", productId: "precision", arrivesAt: 3, deadlineAt: 21 },
+        { id: "L7-02", productId: "precision", arrivesAt: 11, deadlineAt: 24 },
+        { id: "L7-03", productId: "precision", arrivesAt: 14, deadlineAt: 31 },
+        { id: "L7-04", productId: "standard", arrivesAt: 21, deadlineAt: 33 },
+        { id: "L7-05", productId: "standard", arrivesAt: 30, deadlineAt: 48 },
+      ],
+    },
+    {
+      levelId: 8,
+      orderCount: 6,
+      paletteTypes: ["source", "drill", "exit", "cutter", "lathe", "coater"],
+      products: ["standard", "precision", "rustproof"],
+      arrivalWindow: [4, 35],
+      orders: [
+        { id: "L8-01", productId: "standard", arrivesAt: 4, deadlineAt: 23 },
+        { id: "L8-02", productId: "standard", arrivesAt: 8, deadlineAt: 24 },
+        { id: "L8-03", productId: "precision", arrivesAt: 19, deadlineAt: 33 },
+        { id: "L8-04", productId: "precision", arrivesAt: 19, deadlineAt: 37 },
+        { id: "L8-05", productId: "rustproof", arrivesAt: 28, deadlineAt: 40 },
+        { id: "L8-06", productId: "rustproof", arrivesAt: 35, deadlineAt: 49 },
+      ],
+    },
+    {
+      levelId: 9,
+      orderCount: 6,
+      paletteTypes: ["exit", "drill", "source", "cutter", "lathe", "coater"],
+      products: ["standard", "rustproof", "precision"],
+      arrivalWindow: [2, 29],
+      orders: [
+        { id: "L9-01", productId: "standard", arrivesAt: 2, deadlineAt: 16 },
+        { id: "L9-02", productId: "standard", arrivesAt: 9, deadlineAt: 22 },
+        { id: "L9-03", productId: "rustproof", arrivesAt: 17, deadlineAt: 34 },
+        { id: "L9-04", productId: "rustproof", arrivesAt: 23, deadlineAt: 40 },
+        { id: "L9-05", productId: "precision", arrivesAt: 23, deadlineAt: 41 },
+        { id: "L9-06", productId: "precision", arrivesAt: 29, deadlineAt: 40 },
+      ],
+    },
+    {
+      levelId: 10,
+      orderCount: 7,
+      paletteTypes: ["exit", "coater", "drill", "source", "cutter", "lathe"],
+      products: ["standard", "precision", "rustproof"],
+      arrivalWindow: [4, 33],
+      orders: [
+        { id: "L10-01", productId: "standard", arrivesAt: 4, deadlineAt: 21 },
+        { id: "L10-02", productId: "precision", arrivesAt: 6, deadlineAt: 17 },
+        { id: "L10-03", productId: "rustproof", arrivesAt: 13, deadlineAt: 29 },
+        { id: "L10-04", productId: "precision", arrivesAt: 22, deadlineAt: 32 },
+        { id: "L10-05", productId: "rustproof", arrivesAt: 24, deadlineAt: 39 },
+        { id: "L10-06", productId: "standard", arrivesAt: 32, deadlineAt: 44 },
+        { id: "L10-07", productId: "rustproof", arrivesAt: 33, deadlineAt: 45 },
+      ],
+    },
+  ]);
+
+  for (const levelId of [6, 7]) {
+    const productIds = summaries.find((summary) => summary.levelId === levelId).products;
+    assert.deepEqual([...productIds].sort(), ["precision", "standard"]);
+  }
+
+  for (const levelId of [8, 9, 10]) {
+    const productIds = summaries.find((summary) => summary.levelId === levelId).products;
+    assert.deepEqual([...productIds].sort(), ["precision", "rustproof", "standard"]);
+  }
+
+  for (const summary of summaries) {
+    for (const order of summary.orders) {
+      assert.ok(order.deadlineAt > order.arrivesAt);
+    }
+  }
+});

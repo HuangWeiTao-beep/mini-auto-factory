@@ -8,8 +8,11 @@ import {
   connectDevices,
   createEmptyDesign,
   createProductionState,
+  DEVICE_TYPES,
   getDeviceLimit,
+  getAllowedPaletteTypes,
   getLevelConfig,
+  isOrderSchedulingLevel,
   LEVELS,
   moveDevice,
   nextUnlockedLevel,
@@ -185,22 +188,25 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(getLevelConfig(4), LEVELS[4]);
   assert.equal(getDeviceLimit(LEVELS[3], "lathe"), 2);
   assert.equal(nextUnlockedLevel(2, 3), 4);
-  assert.equal(nextUnlockedLevel(5, 5), 5);
+  assert.equal(nextUnlockedLevel(5, 5), 6);
 });
 
 test("the five level configurations match the approved chapter-one rules", () => {
-  const summary = Object.values(LEVELS).map((level) => ({
-    id: level.id,
-    name: level.name,
-    duration: level.duration,
-    target: level.target,
-    deviceLimits: level.deviceLimits,
+  const summary = [1, 2, 3, 4, 5].map((levelId) => {
+    const level = LEVELS[levelId];
+    return {
+      id: level.id,
+      name: level.name,
+      duration: level.duration,
+      target: level.target,
+      deviceLimits: level.deviceLimits,
     transportMode: level.transportMode,
-    transportDuration: level.transportDuration,
-    sourceInterval: level.sourceInterval,
-    machineDurations: level.machineDurations,
-    obstacles: level.obstacles,
-  }));
+      transportDuration: level.transportDuration,
+      sourceInterval: level.sourceInterval,
+      machineDurations: level.machineDurations,
+      obstacles: level.obstacles,
+    };
+  });
 
   assert.deepEqual(summary, [
     {
@@ -284,7 +290,168 @@ test("level five exposes the workshop acceptance display name", () => {
 
 test("success unlocks the next level while completing level five keeps the chapter capped", () => {
   assert.equal(nextUnlockedLevel(1, 1), 2);
-  assert.equal(nextUnlockedLevel(5, 5), 5);
+  assert.equal(nextUnlockedLevel(5, 5), 6);
+  assert.equal(nextUnlockedLevel(9, 9), 10);
+  assert.equal(nextUnlockedLevel(10, 10), 10);
+});
+
+test("chapter-two helpers expose the new order-scheduling machine palette", () => {
+  assert.equal(isOrderSchedulingLevel(LEVELS[5]), false);
+  assert.equal(isOrderSchedulingLevel(LEVELS[6]), true);
+  assert.equal(DEVICE_TYPES.coater.label, "镀层机");
+  assert.deepEqual(getAllowedPaletteTypes(LEVELS[6]), [
+    "source",
+    "cutter",
+    "lathe",
+    "drill",
+    "exit",
+  ]);
+  assert.deepEqual(getAllowedPaletteTypes(LEVELS[8]), [
+    "source",
+    "cutter",
+    "lathe",
+    "drill",
+    "coater",
+    "exit",
+  ]);
+});
+
+test("levels six through ten expose the approved chapter-two configuration shell", () => {
+  const summary = [6, 7, 8, 9, 10].map((levelId) => {
+    const level = LEVELS[levelId];
+    return {
+      id: level.id,
+      name: level.name,
+      chapter: level.chapter,
+      mode: level.mode,
+      duration: level.duration,
+      target: level.target,
+      deviceLimits: level.deviceLimits,
+      transportMode: level.transportMode,
+      machineDurations: level.machineDurations,
+      obstacles: level.obstacles,
+      connectionRules: level.connectionRules,
+      paletteTypes: getAllowedPaletteTypes(level),
+      orderConfig: level.orderConfig,
+    };
+  });
+
+  assert.deepEqual(summary, [
+    {
+      id: 6,
+      name: "订单看板",
+      chapter: 2,
+      mode: "orderScheduling",
+      duration: 70,
+      target: 4,
+      deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, coater: 0, exit: 1 },
+      transportMode: "fixed",
+      machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+      obstacles: [],
+      connectionRules: { allowsParallelInputs: false, allowsParallelOutputs: false },
+      paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+      orderConfig: {
+        orderCount: 4,
+        arrivalWindow: [4, 26],
+        deadlineLeadWindow: [12, 20],
+        productPool: ["standard", "precision"],
+        paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+      },
+    },
+    {
+      id: 7,
+      name: "双线调度",
+      chapter: 2,
+      mode: "orderScheduling",
+      duration: 75,
+      target: 5,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 0, exit: 1 },
+      transportMode: "distance",
+      machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+      obstacles: [{ gridX: 8, gridY: 4 }, { gridX: 13, gridY: 8 }],
+      connectionRules: { allowsParallelInputs: true, allowsParallelOutputs: true },
+      paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+      orderConfig: {
+        orderCount: 5,
+        arrivalWindow: [3, 30],
+        deadlineLeadWindow: [12, 18],
+        productPool: ["standard", "precision"],
+        paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+      },
+    },
+    {
+      id: 8,
+      name: "镀层介入",
+      chapter: 2,
+      mode: "orderScheduling",
+      duration: 80,
+      target: 6,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 1, exit: 1 },
+      transportMode: "fixed",
+      machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+      obstacles: [{ gridX: 8, gridY: 4 }, { gridX: 13, gridY: 8 }],
+      connectionRules: { allowsParallelInputs: true, allowsParallelOutputs: true },
+      paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      orderConfig: {
+        orderCount: 6,
+        arrivalWindow: [2, 36],
+        deadlineLeadWindow: [11, 19],
+        productPool: ["standard", "precision", "rustproof"],
+        paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      },
+    },
+    {
+      id: 9,
+      name: "混单瓶颈",
+      chapter: 2,
+      mode: "orderScheduling",
+      duration: 85,
+      target: 6,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 1, exit: 1 },
+      transportMode: "distance",
+      machineDurations: { cutter: 1, lathe: 3, drill: 2, coater: 2 },
+      obstacles: [
+        { gridX: 6, gridY: 3 },
+        { gridX: 10, gridY: 6 },
+        { gridX: 15, gridY: 9 },
+      ],
+      connectionRules: { allowsParallelInputs: true, allowsParallelOutputs: true },
+      paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      orderConfig: {
+        orderCount: 6,
+        arrivalWindow: [2, 34],
+        deadlineLeadWindow: [10, 18],
+        productPool: ["standard", "precision", "rustproof"],
+        paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      },
+    },
+    {
+      id: 10,
+      name: "总装排程",
+      chapter: 2,
+      mode: "orderScheduling",
+      duration: 90,
+      target: 7,
+      deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 2, exit: 1 },
+      transportMode: "distance",
+      machineDurations: { cutter: 1, lathe: 3, drill: 1, coater: 2 },
+      obstacles: [
+        { gridX: 6, gridY: 3 },
+        { gridX: 10, gridY: 6 },
+        { gridX: 15, gridY: 9 },
+        { gridX: 18, gridY: 4 },
+      ],
+      connectionRules: { allowsParallelInputs: true, allowsParallelOutputs: true },
+      paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      orderConfig: {
+        orderCount: 7,
+        arrivalWindow: [1, 38],
+        deadlineLeadWindow: [9, 17],
+        productPool: ["standard", "precision", "rustproof"],
+        paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
+      },
+    },
+  ]);
 });
 
 test("production state indexes every source by device id without a legacy source alias", () => {

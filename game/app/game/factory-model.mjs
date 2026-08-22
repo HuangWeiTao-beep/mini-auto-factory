@@ -1,20 +1,3 @@
-export const DEVICE_TYPES = {
-  source: { label: "钢棒源", accepts: null, produces: "rod", duration: 3 },
-  cutter: { label: "切割机", accepts: "rod", produces: "blank", duration: 2 },
-  lathe: { label: "车削机", accepts: "blank", produces: "bolt", duration: 3 },
-  exit: { label: "成品出口", accepts: "bolt", produces: null, duration: 0 },
-  drill: { label: "钻孔机", accepts: "undrilledBolt", produces: "bolt", duration: 2 },
-};
-
-export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill"]);
-
-export const MATERIALS = {
-  rod: { label: "长钢棒", shortLabel: "钢棒" },
-  blank: { label: "短料", shortLabel: "短料" },
-  bolt: { label: "螺栓", shortLabel: "螺栓" },
-  undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
-};
-
 import {
   GRID,
   MACHINE,
@@ -22,20 +5,76 @@ import {
   manhattanDistance,
   snapToGrid,
 } from "./factory-grid.mjs";
+import { ORDER_SCENARIO_RULES } from "./order-scheduling.mjs";
+
+const createDeviceSpec = (label, accepts, produces, duration, icon, eyebrow) =>
+  Object.freeze({
+    label,
+    accepts,
+    produces,
+    duration,
+    inputs: accepts ? Object.freeze([accepts]) : Object.freeze([]),
+    outputs: produces ? Object.freeze([produces]) : Object.freeze([]),
+    width: MACHINE.width,
+    height: MACHINE.height,
+    icon,
+    eyebrow,
+  });
+
+export const DEVICE_TYPES = Object.freeze({
+  source: createDeviceSpec("钢棒源", null, "rod", 3, "▰", "SOURCE 01"),
+  cutter: createDeviceSpec("切割机", "rod", "blank", 2, "✂", "CUTTER 02"),
+  lathe: createDeviceSpec("车削机", "blank", "bolt", 3, "⚙", "LATHE 03"),
+  drill: createDeviceSpec("钻孔机", "undrilledBolt", "bolt", 2, "◉", "DRILL 04"),
+  coater: createDeviceSpec("镀层机", "bolt", "coatedBolt", 2, "◌", "COATER 05"),
+  exit: createDeviceSpec("成品出口", "bolt", null, 0, "✓", "EXIT 99"),
+});
+
+export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill", "coater"]);
+
+export const MATERIALS = Object.freeze({
+  rod: { label: "长钢棒", shortLabel: "钢棒" },
+  blank: { label: "短料", shortLabel: "短料" },
+  bolt: { label: "螺栓", shortLabel: "螺栓" },
+  undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
+  coatedBolt: { label: "防锈螺栓", shortLabel: "防锈" },
+});
+
+const DEFAULT_CONNECTION_RULES = Object.freeze({
+  allowsParallelInputs: false,
+  allowsParallelOutputs: false,
+});
 
 const freezeLevel = (level) =>
   Object.freeze({
     ...level,
+    connectionRules: Object.freeze({
+      ...DEFAULT_CONNECTION_RULES,
+      ...(level.connectionRules ?? {}),
+    }),
     deviceLimits: Object.freeze({ ...level.deviceLimits }),
     machineDurations: Object.freeze({ ...level.machineDurations }),
+    paletteTypes: Object.freeze([...(level.paletteTypes ?? [])]),
     obstacles: Object.freeze(
       level.obstacles.map((obstacle) => Object.freeze({ ...obstacle })),
     ),
+    orderConfig: level.orderConfig
+      ? Object.freeze({
+          ...level.orderConfig,
+          arrivalWindow: Object.freeze([...level.orderConfig.arrivalWindow]),
+          deadlineLeadWindow: Object.freeze([
+            ...level.orderConfig.deadlineLeadWindow,
+          ]),
+          productPool: Object.freeze([...level.orderConfig.productPool]),
+        })
+      : null,
   });
 
 export const LEVELS = Object.freeze({
   1: freezeLevel({
     id: 1,
+    chapter: 1,
+    mode: "production",
     name: "螺栓生产",
     routeHint: "钢棒源 → 切割机 → 车削机 → 成品出口",
     duration: 60,
@@ -46,10 +85,15 @@ export const LEVELS = Object.freeze({
     sourceInterval: 3,
     machineDurations: { cutter: 2, lathe: 3, drill: 2 },
     obstacles: [],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ["source", "cutter", "lathe", "exit"],
+    orderConfig: null,
     step: 0.01,
   }),
   2: freezeLevel({
     id: 2,
+    chapter: 1,
+    mode: "production",
     name: "钻孔定位",
     routeHint: "钢棒源 → 切割机 → 车削机 → 钻孔机 → 成品出口",
     duration: 45,
@@ -60,10 +104,15 @@ export const LEVELS = Object.freeze({
     sourceInterval: 3,
     machineDurations: { cutter: 2, lathe: 3, drill: 2 },
     obstacles: [],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+    orderConfig: null,
     step: 0.01,
   }),
   3: freezeLevel({
     id: 3,
+    chapter: 1,
+    mode: "production",
     name: "产能告急",
     routeHint: "两条对称支路汇入成品出口",
     duration: 27,
@@ -74,10 +123,18 @@ export const LEVELS = Object.freeze({
     sourceInterval: 1,
     machineDurations: { cutter: 1, lathe: 3, drill: 1 },
     obstacles: [],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+    orderConfig: null,
     step: 0.01,
   }),
   4: freezeLevel({
     id: 4,
+    chapter: 1,
+    mode: "production",
     name: "有限工位",
     routeHint: "避开障碍，缩短关键连接",
     duration: 48,
@@ -92,10 +149,15 @@ export const LEVELS = Object.freeze({
       { gridX: 12, gridY: 7 },
       { gridX: 17, gridY: 3 },
     ],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+    orderConfig: null,
     step: 0.01,
   }),
   5: freezeLevel({
     id: 5,
+    chapter: 1,
+    mode: "production",
     name: "工坊验收",
     routeHint: "两条紧凑支路汇入成品出口",
     duration: 36,
@@ -112,14 +174,151 @@ export const LEVELS = Object.freeze({
       { gridX: 7, gridY: 10 },
       { gridX: 17, gridY: 10 },
     ],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+    orderConfig: null,
+    step: 0.01,
+  }),
+  6: freezeLevel({
+    id: 6,
+    chapter: 2,
+    mode: "orderScheduling",
+    name: "订单看板",
+    routeHint: "普通与精密订单开始排队，你得先学会分拣。",
+    duration: 70,
+    target: ORDER_SCENARIO_RULES[6].orderCount,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, coater: 0, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+    obstacles: [],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ORDER_SCENARIO_RULES[6].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[6],
+    step: 0.01,
+  }),
+  7: freezeLevel({
+    id: 7,
+    chapter: 2,
+    mode: "orderScheduling",
+    name: "双线调度",
+    routeHint: "同一时段会来两种订单，单线思维差不多该退休了。",
+    duration: 75,
+    target: ORDER_SCENARIO_RULES[7].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 0, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 2,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+    obstacles: [{ gridX: 8, gridY: 4 }, { gridX: 13, gridY: 8 }],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[7].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[7],
+    step: 0.01,
+  }),
+  8: freezeLevel({
+    id: 8,
+    chapter: 2,
+    mode: "orderScheduling",
+    name: "镀层介入",
+    routeHint: "防锈单登场，工艺路线开始分叉。",
+    duration: 80,
+    target: ORDER_SCENARIO_RULES[8].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 1, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 2,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
+    obstacles: [{ gridX: 8, gridY: 4 }, { gridX: 13, gridY: 8 }],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[8].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[8],
+    step: 0.01,
+  }),
+  9: freezeLevel({
+    id: 9,
+    chapter: 2,
+    mode: "orderScheduling",
+    name: "混单瓶颈",
+    routeHint: "钻孔与镀层争抢节拍，瓶颈这位老朋友又来了。",
+    duration: 85,
+    target: ORDER_SCENARIO_RULES[9].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 1, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 1,
+    machineDurations: { cutter: 1, lathe: 3, drill: 2, coater: 2 },
+    obstacles: [
+      { gridX: 6, gridY: 3 },
+      { gridX: 10, gridY: 6 },
+      { gridX: 15, gridY: 9 },
+    ],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[9].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[9],
+    step: 0.01,
+  }),
+  10: freezeLevel({
+    id: 10,
+    chapter: 2,
+    mode: "orderScheduling",
+    name: "总装排程",
+    routeHint: "所有单型一起上，调度要是乱了就别怪看板嘲笑你。",
+    duration: 90,
+    target: ORDER_SCENARIO_RULES[10].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 2, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 1,
+    machineDurations: { cutter: 1, lathe: 3, drill: 1, coater: 2 },
+    obstacles: [
+      { gridX: 6, gridY: 3 },
+      { gridX: 10, gridY: 6 },
+      { gridX: 15, gridY: 9 },
+      { gridX: 18, gridY: 4 },
+    ],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[10].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[10],
     step: 0.01,
   }),
 });
 
 export const LEVEL_CONFIG = LEVELS[1];
+const MAX_LEVEL_ID = Math.max(...Object.keys(LEVELS).map(Number));
 
 export function getLevelConfig(levelId) {
   return LEVELS[levelId];
+}
+
+export function isOrderSchedulingLevel(levelOrId) {
+  if (typeof levelOrId === "number") {
+    return LEVELS[levelOrId]?.mode === "orderScheduling";
+  }
+  return levelOrId?.mode === "orderScheduling";
+}
+
+export function getAllowedPaletteTypes(level) {
+  if (level.paletteTypes?.length) return [...level.paletteTypes];
+  return Object.keys(level.deviceLimits).filter(
+    (type) => level.deviceLimits[type] > 0,
+  );
 }
 
 export function getDeviceLimit(level, type) {
@@ -133,7 +332,7 @@ export function getTransportDuration(level, from, to) {
 }
 
 export function nextUnlockedLevel(unlockedLevel, completedLevelId) {
-  return Math.max(unlockedLevel, Math.min(5, completedLevelId + 1));
+  return Math.max(unlockedLevel, Math.min(MAX_LEVEL_ID, completedLevelId + 1));
 }
 
 const round = (value) => Math.round(value * 1000) / 1000;
@@ -174,10 +373,6 @@ export function canPlaceDevice(design, level, cell, ignoredDeviceId = null) {
   );
 }
 
-function allowsParallelConnections(level) {
-  return level.id === 3 || level.id === 5;
-}
-
 export function connectDevices(design, from, to, level = LEVEL_CONFIG) {
   const source = design.devices[from];
   const target = design.devices[to];
@@ -190,9 +385,18 @@ export function connectDevices(design, from, to, level = LEVEL_CONFIG) {
   ) {
     return design;
   }
-  if (!allowsParallelConnections(level)) {
-    if (design.connections.some((connection) => connection.from === from)) return design;
-    if (design.connections.some((connection) => connection.to === to)) return design;
+  const connectionRules = level.connectionRules ?? DEFAULT_CONNECTION_RULES;
+  if (
+    !connectionRules.allowsParallelOutputs &&
+    design.connections.some((connection) => connection.from === from)
+  ) {
+    return design;
+  }
+  if (
+    !connectionRules.allowsParallelInputs &&
+    design.connections.some((connection) => connection.to === to)
+  ) {
+    return design;
   }
   const branchIndex =
     design.connections

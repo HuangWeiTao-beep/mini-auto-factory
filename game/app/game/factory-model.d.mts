@@ -1,8 +1,22 @@
-export type DeviceType = "source" | "cutter" | "lathe" | "drill" | "exit";
+export type DeviceType = "source" | "cutter" | "lathe" | "drill" | "coater" | "exit";
 export type LevelDeviceType = DeviceType;
-export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt";
+export type ProcessingDeviceType = "cutter" | "lathe" | "drill" | "coater";
+export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt" | "coatedBolt";
 export type GameMode = "design" | "running" | "paused" | "success" | "failure";
 export type TransportMode = "fixed" | "distance";
+export type LevelMode = "production" | "orderScheduling";
+
+export interface ConnectionRules {
+  allowsParallelInputs: boolean;
+  allowsParallelOutputs: boolean;
+}
+
+export interface OrderConfig {
+  orderCount: number;
+  arrivalWindow: readonly [number, number];
+  deadlineLeadWindow: readonly [number, number];
+  productPool: readonly ("standard" | "precision" | "rustproof")[];
+}
 
 export interface GridCell {
   gridX: number;
@@ -11,15 +25,20 @@ export interface GridCell {
 
 export interface LevelConfig {
   id: number;
+  chapter: 1 | 2;
+  mode: LevelMode;
   name: string;
   routeHint: string;
   duration: number;
   target: number;
-  deviceLimits: Readonly<Record<LevelDeviceType, number>>;
+  deviceLimits: Readonly<Partial<Record<LevelDeviceType, number>>>;
   transportMode: TransportMode;
   transportDuration: number;
   sourceInterval: number;
-  machineDurations: Readonly<Record<"cutter" | "lathe" | "drill", number>>;
+  machineDurations: Readonly<Partial<Record<ProcessingDeviceType, number>>>;
+  connectionRules: ConnectionRules;
+  paletteTypes: readonly LevelDeviceType[];
+  orderConfig: OrderConfig | null;
   obstacles: readonly GridCell[];
   step: number;
 }
@@ -78,12 +97,25 @@ export interface ProductionState {
   warning: string | null;
 }
 
-export const DEVICE_TYPES: Record<DeviceType, { label: string; accepts: MaterialType | null; produces: MaterialType | null; duration: number }>;
-export const PROCESSING_TYPES: ReadonlySet<"cutter" | "lathe" | "drill">;
+export const DEVICE_TYPES: Record<DeviceType, {
+  label: string;
+  accepts: MaterialType | null;
+  produces: MaterialType | null;
+  duration: number;
+  inputs: readonly MaterialType[];
+  outputs: readonly MaterialType[];
+  width: number;
+  height: number;
+  icon: string;
+  eyebrow: string;
+}>;
+export const PROCESSING_TYPES: ReadonlySet<ProcessingDeviceType>;
 export const MATERIALS: Record<MaterialType, { label: string; shortLabel: string }>;
 export const LEVELS: Readonly<Record<number, LevelConfig>>;
 export const LEVEL_CONFIG: LevelConfig;
 export function getLevelConfig(levelId: number): LevelConfig | undefined;
+export function isOrderSchedulingLevel(levelOrId: number | LevelConfig): boolean;
+export function getAllowedPaletteTypes(level: LevelConfig): LevelDeviceType[];
 export function getDeviceLimit(level: LevelConfig, type: LevelDeviceType): number;
 export function getTransportDuration(level: LevelConfig, from: GridCell, to: GridCell): number;
 export function nextUnlockedLevel(unlockedLevel: number, completedLevelId: number): number;

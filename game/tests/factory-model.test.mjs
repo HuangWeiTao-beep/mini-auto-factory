@@ -353,7 +353,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       orderConfig: {
         orderCount: 4,
         arrivalWindow: [4, 26],
-        deadlineLeadWindow: [12, 20],
+        deadlineLeadWindow: [22, 22],
         productPool: ["standard", "precision"],
         paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
       },
@@ -374,7 +374,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       orderConfig: {
         orderCount: 5,
         arrivalWindow: [3, 30],
-        deadlineLeadWindow: [12, 18],
+        deadlineLeadWindow: [18, 26],
         productPool: ["standard", "precision"],
         paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
       },
@@ -395,7 +395,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       orderConfig: {
         orderCount: 6,
         arrivalWindow: [2, 36],
-        deadlineLeadWindow: [11, 19],
+        deadlineLeadWindow: [24, 32],
         productPool: ["standard", "precision", "rustproof"],
         paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
       },
@@ -420,7 +420,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       orderConfig: {
         orderCount: 6,
         arrivalWindow: [2, 34],
-        deadlineLeadWindow: [10, 18],
+        deadlineLeadWindow: [22, 34],
         productPool: ["standard", "precision", "rustproof"],
         paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
       },
@@ -446,7 +446,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       orderConfig: {
         orderCount: 7,
         arrivalWindow: [1, 38],
-        deadlineLeadWindow: [9, 17],
+        deadlineLeadWindow: [20, 32],
         productPool: ["standard", "precision", "rustproof"],
         paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
       },

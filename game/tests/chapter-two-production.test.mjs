@@ -5,11 +5,14 @@ import {
   LEVELS,
   addDevice,
   advanceProduction,
+  canPlaceDevice,
   connectDevices,
   createEmptyDesign,
   createProductionState,
   enqueueProductionOrder,
+  getTransportDuration,
   moveProductionOrder,
+  pauseProduction,
   startProduction,
 } from "../app/game/factory-model.mjs";
 import { createOrderScenario } from "../app/game/order-scheduling.mjs";
@@ -44,11 +47,59 @@ function addNamedDevice(design, id, type) {
   return addDevice(design, type, 36, 72, id);
 }
 
+const LEGAL_RECIPE_POSITIONS = Object.freeze({
+  source: [1, 6],
+  exit: [16, 2],
+  "cutter-1": [6, 6],
+  "cutter-2": [1, 2],
+  "lathe-1": [11, 6],
+  "lathe-2": [6, 2],
+  "drill-1": [11, 2],
+  "drill-2": [16, 6],
+  "coater-1": [11, 10],
+  "coater-2": [16, 10],
+});
+
+function addLegalRecipeDevice(design, level, id, type) {
+  const [gridX, gridY] = LEGAL_RECIPE_POSITIONS[id];
+  assert.equal(
+    canPlaceDevice(design, level, { gridX, gridY }),
+    true,
+    `level ${level.id}: ${id} must be legally placeable at ${gridX},${gridY}`,
+  );
+  return addDevice(design, type, gridX * 36, gridY * 36, id);
+}
+
+function assertRecipeDesignIsLegal(design, level) {
+  let placed = createEmptyDesign();
+  for (const device of Object.values(design.devices)) {
+    assert.equal(device.gridX >= 1 && device.gridX <= 16, true);
+    assert.equal(device.gridY >= 2 && device.gridY <= 10, true);
+    assert.equal(
+      canPlaceDevice(placed, level, device),
+      true,
+      `level ${level.id}: ${device.id} overlaps a device or obstacle`,
+    );
+    placed = addDevice(placed, device.type, device.x, device.y, device.id);
+  }
+  if (level.transportMode === "distance") {
+    for (const connection of design.connections) {
+      assert.ok(
+        getTransportDuration(
+          level,
+          design.devices[connection.from],
+          design.devices[connection.to],
+        ) >= 2,
+        `level ${level.id}: ${connection.id} must retain grid-distance transport`,
+      );
+    }
+  }
+}
+
 function createRecipeDesign(level) {
   let design = createEmptyDesign();
-  let index = 0;
-  design = addNamedDevice(design, "source", "source", index++);
-  design = addNamedDevice(design, "exit", "exit", index++);
+  design = addLegalRecipeDevice(design, level, "source", "source");
+  design = addLegalRecipeDevice(design, level, "exit", "exit");
 
   const cutterIds = [];
   const latheIds = [];
@@ -57,22 +108,22 @@ function createRecipeDesign(level) {
   for (let machineIndex = 0; machineIndex < (level.deviceLimits.cutter ?? 0); machineIndex += 1) {
     const id = `cutter-${machineIndex + 1}`;
     cutterIds.push(id);
-    design = addNamedDevice(design, id, "cutter", index++);
+    design = addLegalRecipeDevice(design, level, id, "cutter");
   }
   for (let machineIndex = 0; machineIndex < (level.deviceLimits.lathe ?? 0); machineIndex += 1) {
     const id = `lathe-${machineIndex + 1}`;
     latheIds.push(id);
-    design = addNamedDevice(design, id, "lathe", index++);
+    design = addLegalRecipeDevice(design, level, id, "lathe");
   }
   for (let machineIndex = 0; machineIndex < (level.deviceLimits.drill ?? 0); machineIndex += 1) {
     const id = `drill-${machineIndex + 1}`;
     drillIds.push(id);
-    design = addNamedDevice(design, id, "drill", index++);
+    design = addLegalRecipeDevice(design, level, id, "drill");
   }
   for (let machineIndex = 0; machineIndex < (level.deviceLimits.coater ?? 0); machineIndex += 1) {
     const id = `coater-${machineIndex + 1}`;
     coaterIds.push(id);
-    design = addNamedDevice(design, id, "coater", index++);
+    design = addLegalRecipeDevice(design, level, id, "coater");
   }
 
   for (const cutterId of cutterIds) {
@@ -345,7 +396,9 @@ test("levels six through ten complete their fixed scenarios with deadline-first 
   for (const levelId of [6, 7, 8, 9, 10]) {
     const level = LEVELS[levelId];
     const scenario = createOrderScenario(levelId, FIXED_LEVEL_SEEDS[levelId]);
-    const completed = simulateScheduledScenario(createRecipeDesign(level), level, scenario);
+    const design = createRecipeDesign(level);
+    assertRecipeDesignIsLegal(design, level);
+    const completed = simulateScheduledScenario(design, level, scenario);
 
     assert.equal(
       completed.mode,
@@ -362,6 +415,39 @@ test("levels six through ten complete their fixed scenarios with deadline-first 
     );
     assert.equal(completed.completed, scenario.orders.length);
   }
+});
+
+test("editing a paused chapter-two attempt restarts the same seed from pristine orders", () => {
+  const level = LEVELS[6];
+  const design = createRecipeDesign(level);
+  const scenario = createOrderScenario(level.id, FIXED_LEVEL_SEEDS[level.id]);
+  let state = startScenario(design, level, scenario);
+  state = advanceProduction(state, design, level, scenario.orders[0].arrivesAt);
+  state = enqueueProductionOrder(state, scenario.orders[0].id);
+  state = advanceProduction(state, design, level, 1);
+  assert.equal(state.orders[0].status, "inProduction");
+
+  const restarted = startProduction(pauseProduction(state), {
+    edited: true,
+    design,
+    level,
+  });
+
+  assert.equal(restarted.mode, "running");
+  assert.equal(restarted.scenarioSeed, scenario.seed);
+  assert.equal(restarted.elapsed, 0);
+  assert.deepEqual(restarted.orders, scenario.orders);
+  assert.deepEqual(restarted.queue, scenario.queue);
+  assert.deepEqual(restarted.completedOrderIds, []);
+  assert.equal(restarted.failure, null);
+  assert.equal(Object.values(restarted.sources).every((source) => source.output === null), true);
+  assert.equal(Object.values(restarted.lines).every((line) => line.item === null), true);
+  assert.equal(
+    Object.values(restarted.machines).every(
+      (machine) => !machine.active && !machine.waiting && !machine.output,
+    ),
+    true,
+  );
 });
 
 test("leaving an urgent order behind a long recipe causes an overdue failure", () => {

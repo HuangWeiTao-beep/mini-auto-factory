@@ -50,4 +50,34 @@
 
 ## Concerns
 
-- Fixed-seed completion tests intentionally use minimum modeled transport distance to isolate production and scheduling semantics. The current Task 1 deadline windows are shorter than the lower bound of some fully non-overlapping distance-mode layouts (especially an urgent level-10 precision order), so physical-layout feasibility should be recalibrated with scenario timing before chapter-two UI/E2E acceptance. No Task 1 scenario constants were changed in this task.
+- None after Fix round 1. The original physical-layout feasibility concern was resolved by recalibrating scenario deadlines and replacing the overlapping fixture with a legal distance-aware layout.
+
+## Fix round 1
+
+### Findings addressed
+
+- Recalibrated `ORDER_SCENARIO_RULES` deadline lead windows to the chapter-two design ranges: level 6 `[22, 22]`, level 7 `[18, 26]`, level 8 `[24, 32]`, level 9 `[22, 34]`, and level 10 `[20, 32]`.
+- Updated deterministic order snapshots and level configuration assertions for the new fixed-seed deadlines.
+- Replaced the overlapping completion fixture with a compact layout whose devices are all added and revalidated through `canPlaceDevice`, stay inside the player-reachable bounds, avoid configured obstacle cells, and do not overlap.
+- Kept distance transport intact: distance-mode fixture connections explicitly assert a transport duration of at least two seconds, and levels 6-10 still complete with deadline-first scheduling.
+- Changed chapter-two paused-edit restart to regenerate a pristine scenario from the existing `scenarioSeed`, clearing runtime statuses, queue, completion, failure, sources, lines, and machine buffers while preserving deterministic order identity.
+- Added a regression that launches an order, pauses, edits, and restarts, then asserts the exact initial scenario is restored with no orphaned `inProduction` order.
+
+### TDD evidence
+
+- RED: the legal-layout fixed-seed test failed at level 7 under the old deadline windows, and the paused-edit regression retained `L6-01` as `inProduction` with no material.
+- GREEN: the calibrated windows plus same-seed scenario regeneration made both regressions pass.
+- Focused command: `cd game && node --test tests/factory-model.test.mjs tests/chapter-two-production.test.mjs` — 45 passed, 0 failed.
+- Deterministic scenario command: `cd game && node --test tests/order-scheduling.test.mjs` — 7 passed, 0 failed.
+- Lint: `cd game && npm run lint` — exit 0, no lint errors.
+- Full build and regression suite: `cd game && npm test` — build succeeded; 97 passed, 0 failed.
+- `git diff --check` reported no whitespace errors; only LF-to-CRLF checkout notices appeared.
+
+### Commit
+
+- Pre-fix HEAD: `24674afa2bf92f3c43a0d5dfa159eabd94115882`
+- Fix-round commit hash is supplied in the final handoff because a commit cannot contain its own hash.
+
+### Remaining concerns
+
+- None.

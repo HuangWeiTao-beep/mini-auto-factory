@@ -9,6 +9,7 @@ import {
   ORDER_SCENARIO_RULES,
   PRODUCTS,
   activateArrivedOrders,
+  createOrderScenario,
   enqueueWaitingOrder,
   moveQueuedOrder,
 } from "./order-scheduling.mjs";
@@ -517,11 +518,15 @@ export function startProduction(state, options = {}) {
     }
     if (["success", "failure"].includes(state.mode)) return state;
     if (!options.edited) return { ...state, mode: "running" };
+    const freshScenario = createOrderScenario(
+      options.level.id,
+      state.scenarioSeed,
+    );
     return {
       ...createProductionState(
         options.design ?? { devices: {}, connections: [] },
         options.level,
-        asOrderScenario(state),
+        freshScenario,
       ),
       mode: "running",
     };

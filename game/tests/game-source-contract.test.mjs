@@ -119,7 +119,7 @@ test("critical controls keep keyboard cancellation, modal focus and running-stat
   assert.match(machine, /disabled=\{locked\}/);
 });
 
-test("settlement copy follows the active level and level five has no next-level action", async () => {
+test("settlement copy follows the active level and advances through the full level catalog", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
     "utf8",
@@ -128,7 +128,8 @@ test("settlement copy follows the active level and level five has no next-level 
   assert.match(game, /state\.completed\} \/ \{level\.target/);
   assert.match(game, /第 \$\{activeLevelId \+ 1\} 关已解锁/);
   assert.match(game, /第一章全部验收通过/);
-  assert.match(game, /const hasNextLevel = activeLevelId < 5/);
+  assert.match(game, /第二章全部验收通过/);
+  assert.match(game, /const hasNextLevel = activeLevelId < maxLevelId/);
   assert.match(game, /state\.mode === "success" && hasNextLevel/);
 });
 
@@ -202,4 +203,66 @@ test("connection ports and labels share the snapped machine geometry", async () 
   assert.match(floor, /to\.gridX\s*\*\s*GRID\.cellSize/);
   assert.match(floor, /to\.gridY\s*\*\s*GRID\.cellSize/);
   assert.doesNotMatch(floor, /from\.x|from\.y|to\.x|to\.y/);
+});
+
+test("chapter two exposes a pure order panel with stable accessible queue controls", async () => {
+  const [game, orderPanel] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/OrderPanel.tsx", import.meta.url), "utf8"),
+  ]);
+
+  for (const label of ["待排订单", "生产队列", "当前投料", "已完成"]) {
+    assert.match(orderPanel, new RegExp(label));
+  }
+  for (const testId of [
+    "order-waiting-",
+    "order-queue-",
+    "queue-up-",
+    "queue-down-",
+    "order-current",
+    "order-completed-count",
+    "order-failure",
+  ]) {
+    assert.match(orderPanel, new RegExp(testId));
+  }
+  for (const buttonName of ["加入生产队列", "上移订单", "下移订单"]) {
+    assert.match(orderPanel, new RegExp(`aria-label=.*${buttonName}`));
+  }
+  assert.match(orderPanel, /剩余不足 6 秒/);
+  assert.doesNotMatch(orderPanel, /useGameSession|game-session|saveGameSession|enqueueProductionOrder|moveProductionOrder/);
+  assert.match(game, /<OrderPanel/);
+  assert.match(game, /actionsEnabled=\{state\.mode === "running"\}/);
+});
+
+test("chapter two uses scenario palette order and chapter-aware level copy", async () => {
+  const [game, machine, levelSelect] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/MachineCard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(game, /scenario\?\.paletteTypes \?\? level\.paletteTypes/);
+  assert.match(game, /CHAPTER \$\{level\.chapter === 1 \? "ONE" : "TWO"\}/);
+  assert.match(game, /const hasNextLevel = activeLevelId < maxLevelId/);
+  assert.match(game, /第二章全部验收通过/);
+  assert.match(machine, /coater:\s*"◌"/);
+  assert.match(machine, /镀层成为防锈螺栓/);
+  assert.match(levelSelect, /第一章：产线基础/);
+  assert.match(levelSelect, /第二章：订单调度/);
+  assert.match(levelSelect, /level\.orderConfig\.orderCount/);
+  assert.match(levelSelect, /交付窗口/);
+});
+
+test("level six includes one-time order scheduling guidance", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /第 6 关怎么玩/);
+  assert.match(game, /订单到达/);
+  assert.match(game, /加入队列/);
+  assert.match(game, /投料后锁定/);
+  assert.match(game, /截止时间/);
+  assert.match(game, /shownChapterTwoOnboarding/);
 });

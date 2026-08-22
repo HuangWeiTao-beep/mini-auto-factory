@@ -27,6 +27,8 @@ test("server-renders the mini factory game shell", async () => {
   assert.match(html, /章节关卡/);
   assert.match(html, /aria-label="打开关卡选择"/);
   assert.match(html, /aria-label="清除本地进度"/);
+  assert.match(html, /MINI AUTOMATION FACTORY · CHAPTER ONE/);
+  assert.doesNotMatch(html, /data-testid="order-current"|待排订单|生产队列/);
   assert.equal(html.match(/aria-modal="true"/g)?.length ?? 0, 0);
   assert.doesNotMatch(html, /codex-preview|Building your site|react-loading-skeleton/);
 });

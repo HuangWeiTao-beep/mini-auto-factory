@@ -1,6 +1,6 @@
 import type { DragEvent, MouseEvent } from "react";
 import { DEVICE_TYPES, MATERIALS } from "./factory-model.mjs";
-import type { Device, LevelConfig, MaterialType, ProductionState } from "./factory-model.mjs";
+import type { Device, DeviceType, LevelConfig, MaterialType, OrderMaterial, ProductionState } from "./factory-model.mjs";
 import { GRID } from "./factory-grid.mjs";
 
 type Props = {
@@ -14,7 +14,7 @@ type Props = {
   onDragStart: (event: DragEvent<HTMLElement>, id: string) => void;
 };
 
-const icons = { source: "▰", cutter: "✂", lathe: "⚙", drill: "◉", exit: "✓" } as const;
+const icons: Record<DeviceType, string> = { source: "▰", cutter: "✂", lathe: "⚙", drill: "◉", coater: "◌", exit: "✓" };
 const statusLabels: Record<string, string> = {
   idle: "待机",
   working: "加工中",
@@ -24,18 +24,27 @@ const statusLabels: Record<string, string> = {
   warning: "工序警告",
 };
 
-function materialLabel(kind: MaterialType | null | undefined) {
-  return kind ? MATERIALS[kind].shortLabel : "空";
+function materialLabel(material: MaterialType | OrderMaterial | null | undefined) {
+  if (!material) return "空";
+  const kind = typeof material === "string" ? material : material.kind;
+  return MATERIALS[kind].shortLabel;
+}
+
+function processingDuration(device: Device, level: LevelConfig) {
+  if (device.type === "source" || device.type === "exit") return DEVICE_TYPES[device.type].duration;
+  return level.machineDurations[device.type] ?? DEVICE_TYPES[device.type].duration;
 }
 
 function machineDescription(device: Device, level: LevelConfig) {
   if (device.type === "source") return `${level.sourceInterval.toFixed(1)} 秒 / 根`;
-  if (device.type === "cutter") return `长钢棒 → 短料 · ${level.machineDurations.cutter.toFixed(1)} 秒`;
+  const duration = processingDuration(device, level).toFixed(1);
+  if (device.type === "cutter") return `长钢棒 → 短料 · ${duration} 秒`;
   if (device.type === "lathe") {
-    const output = level.id === 1 ? "螺栓" : "未钻孔螺栓";
-    return `短料 → ${output} · ${level.machineDurations.lathe.toFixed(1)} 秒`;
+    const output = level.chapter === 1 && level.id > 1 ? "未钻孔螺栓" : "螺栓";
+    return `短料 → ${output} · ${duration} 秒`;
   }
-  if (device.type === "drill") return `未钻孔螺栓 → 螺栓 · ${level.machineDurations.drill.toFixed(1)} 秒`;
+  if (device.type === "drill") return `未钻孔螺栓 → 螺栓 · ${duration} 秒`;
+  if (device.type === "coater") return `螺栓 → 镀层成为防锈螺栓 · ${duration} 秒`;
   return "合格品计数";
 }
 
@@ -66,11 +75,9 @@ export function MachineCard({
         : status;
   const hasInput = device.type !== "source";
   const hasOutput = device.type !== "exit";
-  const processingDuration = device.type === "cutter" || device.type === "lathe" || device.type === "drill"
-    ? level.machineDurations[device.type]
-    : spec.duration;
+  const duration = processingDuration(device, level);
   const progress = machine?.active
-    ? Math.max(0, 1 - machine.remaining / processingDuration)
+    ? Math.max(0, 1 - machine.remaining / duration)
     : 0;
 
   const finishConnection = (event: MouseEvent<HTMLButtonElement>) => {

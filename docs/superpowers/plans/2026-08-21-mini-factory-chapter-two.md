@@ -18,7 +18,7 @@
 
 ---
 
-## 任务 1：建立第二章关卡、配方与确定性订单领域模块
+## Task 1：建立第二章关卡、配方与确定性订单领域模块
 
 **文件：**
 
@@ -54,7 +54,7 @@ feat: define chapter two orders and recipes
 
 ---
 
-## 任务 2：让产线按订单配方投料、加工、交付和失败
+## Task 2：让产线按订单配方投料、加工、交付和失败
 
 **文件：**
 
@@ -90,7 +90,7 @@ feat: run recipe-aware order production
 
 ---
 
-## 任务 3：升级存档和会话层，保证刷新可复现、重试会换局
+## Task 3：升级存档和会话层，保证刷新可复现、重试会换局
 
 **文件：**
 
@@ -125,7 +125,7 @@ feat: persist chapter two scenarios safely
 
 ---
 
-## 任务 4：交付章节二界面、订单面板和关卡选择
+## Task 4：交付章节二界面、订单面板和关卡选择
 
 **文件：**
 
@@ -164,7 +164,7 @@ feat: add chapter two order scheduling UI
 
 ---
 
-## 任务 5：为真实浏览器流程补齐端到端覆盖
+## Task 5：为真实浏览器流程补齐端到端覆盖
 
 **文件：**
 
@@ -196,7 +196,7 @@ test: cover chapter two order scheduling flows
 
 ---
 
-## 任务 6：更新说明、完整回归和人工验收
+## Task 6：更新说明、完整回归和人工验收
 
 **文件：**
 

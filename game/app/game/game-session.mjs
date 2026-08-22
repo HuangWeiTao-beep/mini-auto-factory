@@ -39,6 +39,13 @@ function createSessionScenario(level, seed) {
     : null;
 }
 
+function updateStableDraft(session, design) {
+  return {
+    ...(session.drafts ?? {}),
+    [session.activeLevelId]: design,
+  };
+}
+
 export function recordBestResult(bestResults, levelId, result) {
   const previous = bestResults[levelId];
   if (previous && previous.elapsed <= result.elapsed) return bestResults;
@@ -134,6 +141,9 @@ export function updateGameDesign(session, nextDesign) {
   return {
     ...session,
     design: nextDesign,
+    drafts: session.state.mode === "running"
+      ? session.drafts ?? {}
+      : updateStableDraft(session, nextDesign),
     state: session.state.mode === "paused"
       ? session.state
       : createProductionState(nextDesign, level, session.scenario),
@@ -176,6 +186,7 @@ export function resetGameSession(session, keepDesign) {
       chapterTwoSeeds,
       scenario,
       design,
+      drafts: updateStableDraft(session, design),
       state: createProductionState(design, level, scenario),
       editedWhilePaused: false,
       recordBroken: false,
@@ -184,6 +195,7 @@ export function resetGameSession(session, keepDesign) {
   return {
     ...session,
     design,
+    drafts: updateStableDraft(session, design),
     state: createProductionState(design),
     editedWhilePaused: false,
     recordBroken: false,

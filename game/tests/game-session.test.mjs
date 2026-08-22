@@ -106,6 +106,32 @@ test("saving a paused layout makes that layout available after a refresh", () =>
   assert.deepEqual(refreshed.design, draft);
 });
 
+test("a running save keeps the latest design that was saved before production started", () => {
+  const storage = memoryStorage();
+  const originalDraft = { devices: {}, connections: [] };
+  const revisedDraft = {
+    devices: {
+      source: { ...draft.devices.source, x: 72, gridX: 2 },
+    },
+    connections: [],
+  };
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 1,
+    activeLevelId: 1,
+    bestResults: {},
+    drafts: { 1: originalDraft },
+    chapterTwoSeeds: {},
+  });
+  const revised = updateGameDesign(restoreGameSession(storage), revisedDraft);
+
+  saveGameSession(storage, revised);
+  const running = startGameSession(revised, LEVELS[1]);
+  saveGameSession(storage, running);
+
+  assert.deepEqual(restoreGameSession(storage).design, revisedDraft);
+});
+
 test("restoring the second level keeps its saved draft in design mode without level-one onboarding", () => {
   const storage = memoryStorage();
   saveGameSave(storage, {
@@ -325,6 +351,7 @@ test("first chapter-two restore persists a seed while every retry replaces it", 
   assert.deepEqual(kept.scenario, createOrderScenario(6, kept.chapterTwoSeeds[6]));
   assert.notEqual(cleared.chapterTwoSeeds[6], kept.chapterTwoSeeds[6]);
   assert.deepEqual(cleared.design, { devices: {}, connections: [] });
+  assert.deepEqual(cleared.drafts[6], { devices: {}, connections: [] });
   assert.deepEqual(cleared.state, createProductionState(
     cleared.design,
     LEVELS[6],
@@ -516,6 +543,7 @@ test("resetting a session without its layout creates an empty design attempt", (
     activeLevelId: 1,
     unlockedLevel: 1,
     bestResults: {},
+    drafts: { 1: draft },
     design: draft,
     state: runningState,
     editedWhilePaused: true,
@@ -525,6 +553,7 @@ test("resetting a session without its layout creates an empty design attempt", (
   const reset = resetGameSession(session, false);
 
   assert.deepEqual(reset.design, { devices: {}, connections: [] });
+  assert.deepEqual(reset.drafts[1], { devices: {}, connections: [] });
   assert.equal(reset.state.mode, "design");
   assert.equal(reset.state.elapsed, 0);
   assert.equal(reset.editedWhilePaused, false);

@@ -95,3 +95,32 @@
 ### Remaining concerns
 
 - The seven pre-existing `MachineCard.tsx` type errors remain intentionally deferred to Task 4; this fix round does not modify chapter-two UI.
+
+## Fix round 2
+
+### Finding addressed
+
+- Made `session.drafts` a coherent authoritative snapshot whenever a design becomes persistable. `updateGameDesign(...)` now updates the active draft in design and paused modes, and both chapter-one and chapter-two `resetGameSession(...)` paths update the stable draft after keeping or clearing the layout.
+- Running state still never promotes an in-flight design into the stable draft map. The subsequent running save therefore reuses the exact non-running snapshot already carried by the session instead of overwriting storage with an older entry.
+- This preserves the Fix round 1 write-failure guarantee: memory remains authoritative during level switches, but its draft map is no longer stale after an ordinary successful design save.
+
+### TDD evidence
+
+- RED: starting with chapter-one draft A, editing to B, saving in design mode, starting production, saving in running mode, and refreshing restored A.
+- GREEN: the same sequence restores B because the design edit synchronizes `session.drafts[1]` before production starts.
+- Added direct assertions that clearing the layout updates the stable draft map in both chapter-one and chapter-two reset flows.
+- Required acceptance: `cd game && node --test tests/game-save.test.mjs tests/game-session.test.mjs` — 32 passed, 0 failed.
+- Full Node regression: `cd game && node --test tests/*.test.mjs` — 108 passed, 0 failed.
+- Build: `cd game && npm run build` — exit 0.
+- Lint: `cd game && npm run lint` — exit 0, no lint errors.
+- `git diff --check` reported no whitespace errors; only the repository's LF-to-CRLF checkout notices appeared.
+
+### Commit
+
+- Pre-fix HEAD: `fccaa16f172d4d8c3fd081c6063d7b43296c40f4`
+- Planned fix commit message: `fix: keep stable drafts current`
+- The fix commit hash is supplied in the final handoff because a commit cannot contain its own hash.
+
+### Remaining concerns
+
+- The seven pre-existing `MachineCard.tsx` Task 4 type errors remain outside this session-layer fix.

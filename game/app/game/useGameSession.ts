@@ -4,6 +4,8 @@ import type { FactoryDesign } from "./factory-model.mjs";
 import {
   applyProductionState,
   clearGameSession,
+  enqueueSessionOrder,
+  moveSessionQueuedOrder,
   resetGameSession,
   restoreGameSession,
   saveGameSession,
@@ -39,6 +41,7 @@ export function useGameSession(options: {
     activeLevelId: persistedActiveLevelId,
     unlockedLevel: persistedUnlockedLevel,
     bestResults: persistedBestResults,
+    chapterTwoSeeds: persistedChapterTwoSeeds,
     design: persistedDesign,
   } = session;
   const persistedStateMode = session.state.mode;
@@ -71,10 +74,18 @@ export function useGameSession(options: {
       activeLevelId: persistedActiveLevelId,
       unlockedLevel: persistedUnlockedLevel,
       bestResults: persistedBestResults,
+      chapterTwoSeeds: persistedChapterTwoSeeds,
       design: persistedDesign,
       state: { mode: persistedStateMode },
     }),
-    [persistedActiveLevelId, persistedUnlockedLevel, persistedBestResults, persistedDesign, persistedStateMode],
+    [
+      persistedActiveLevelId,
+      persistedUnlockedLevel,
+      persistedBestResults,
+      persistedChapterTwoSeeds,
+      persistedDesign,
+      persistedStateMode,
+    ],
   );
 
   useEffect(() => {
@@ -93,8 +104,9 @@ export function useGameSession(options: {
       previousTime.current = time;
       const delta = Math.min(0.1, (time - previous) / 1000);
       const current = sessionRef.current;
-      const nextState = advanceProduction(current.state, current.design, level, delta);
-      const next = applyProductionState(current, nextState, level);
+      const currentLevel = LEVELS[current.activeLevelId];
+      const nextState = advanceProduction(current.state, current.design, currentLevel, delta);
+      const next = applyProductionState(current, nextState, currentLevel);
       sessionRef.current = next;
       setSession(next);
       frameRef.current = requestAnimationFrame(loop);
@@ -130,6 +142,36 @@ export function useGameSession(options: {
     setSession(next);
   }, [session]);
 
+  const enqueueOrder = useCallback((orderId: string) => {
+    const current = sessionRef.current;
+    const next = enqueueSessionOrder(current, orderId);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
+  const moveOrder = useCallback((orderId: string, offset: number) => {
+    const current = sessionRef.current;
+    const currentIndex = current.state.queue?.indexOf(orderId) ?? -1;
+    if (currentIndex < 0) return false;
+    const next = moveSessionQueuedOrder(current, orderId, currentIndex + offset);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
+  const moveOrderUp = useCallback(
+    (orderId: string) => moveOrder(orderId, -1),
+    [moveOrder],
+  );
+
+  const moveOrderDown = useCallback(
+    (orderId: string) => moveOrder(orderId, 1),
+    [moveOrder],
+  );
+
   const selectLevel = useCallback((levelId: number) => {
     const selected = selectGameLevel(undefined, session, levelId);
     if (!selected.accepted) return false;
@@ -152,6 +194,9 @@ export function useGameSession(options: {
     start,
     pause,
     reset,
+    enqueueOrder,
+    moveOrderUp,
+    moveOrderDown,
     selectLevel,
     clearProgress,
   };

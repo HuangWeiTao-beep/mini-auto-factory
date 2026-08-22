@@ -9,13 +9,15 @@ export interface FactoryDraft {
 }
 
 export interface GameSaveState {
-  version: 1;
+  version: 2;
   unlockedLevel: number;
+  activeLevelId: number;
   bestResults: Record<string, BestResult>;
   drafts: Record<string, FactoryDraft>;
+  chapterTwoSeeds: Record<number, number>;
 }
 
-export const SAVE_VERSION: 1;
+export const SAVE_VERSION: 2;
 export const SAVE_STORAGE_KEY: string;
 export const DEFAULT_SAVE_STATE: Readonly<GameSaveState>;
 export function createDefaultSaveState(): GameSaveState;

@@ -1,8 +1,8 @@
-import { LEVELS } from "./factory-model.mjs";
-
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 export const SAVE_STORAGE_KEY = "mini-factory-save";
-const MAX_SAVE_LEVEL_ID = Math.max(...Object.keys(LEVELS).map(Number));
+const MAX_SAVE_LEVEL_ID = 10;
+const FIRST_CHAPTER_TWO_LEVEL_ID = 6;
+const MAX_SEED = 0xffffffff;
 
 const isRecord = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -14,6 +14,7 @@ export function createDefaultSaveState() {
     activeLevelId: 1,
     bestResults: {},
     drafts: {},
+    chapterTwoSeeds: {},
   };
 }
 
@@ -37,7 +38,7 @@ function isValidDraft(draft) {
 
 function isValidSaveState(value) {
   if (!isRecord(value)) return false;
-  if (value.version !== SAVE_VERSION) return false;
+  if (value.version !== 1 && value.version !== SAVE_VERSION) return false;
   if (!Number.isInteger(value.unlockedLevel) || value.unlockedLevel < 1) return false;
   if (
     value.unlockedLevel > MAX_SAVE_LEVEL_ID ||
@@ -47,6 +48,24 @@ function isValidSaveState(value) {
   return (
     Object.values(value.bestResults).every(isValidResult) &&
     Object.values(value.drafts).every(isValidDraft)
+  );
+}
+
+function normalizeChapterTwoSeeds(value) {
+  if (!isRecord(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter(([levelId, seed]) => {
+      const numericLevelId = Number(levelId);
+      return (
+        Number.isInteger(numericLevelId) &&
+        String(numericLevelId) === levelId &&
+        numericLevelId >= FIRST_CHAPTER_TWO_LEVEL_ID &&
+        numericLevelId <= MAX_SAVE_LEVEL_ID &&
+        Number.isInteger(seed) &&
+        seed >= 0 &&
+        seed <= MAX_SEED
+      );
+    }),
   );
 }
 
@@ -61,8 +80,14 @@ function normalizedActiveLevelId(activeLevelId, unlockedLevel) {
 
 function normalizeSaveState(state) {
   return {
-    ...state,
+    version: SAVE_VERSION,
+    unlockedLevel: state.unlockedLevel,
     activeLevelId: normalizedActiveLevelId(state.activeLevelId, state.unlockedLevel),
+    bestResults: state.bestResults,
+    drafts: state.drafts,
+    chapterTwoSeeds: state.version === 1
+      ? {}
+      : normalizeChapterTwoSeeds(state.chapterTwoSeeds),
   };
 }
 

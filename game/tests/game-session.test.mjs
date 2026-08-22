@@ -3,9 +3,13 @@ import test from "node:test";
 
 import { SAVE_VERSION, loadGameSave, saveGameSave } from "../app/game/game-save.mjs";
 import { LEVELS, createProductionState } from "../app/game/factory-model.mjs";
+import { createOrderScenario } from "../app/game/order-scheduling.mjs";
 import {
   applyProductionState,
   clearGameSession,
+  enqueueSessionOrder,
+  generateChapterTwoSeed,
+  moveSessionQueuedOrder,
   recordBestResult,
   resolveClearProgressDecision,
   restoreGameSession,
@@ -39,6 +43,7 @@ test("restoring a selected level recovers its unlocked progress, best result, an
     unlockedLevel: 3,
     bestResults: { 2: { elapsed: 33.2, completed: 10 } },
     drafts: { 2: draft },
+    chapterTwoSeeds: {},
   });
 
   const session = restoreGameSession(storage, 2);
@@ -57,6 +62,7 @@ test("saving a running production state preserves the last non-running layout dr
     unlockedLevel: 1,
     bestResults: {},
     drafts: { 1: previousDraft },
+    chapterTwoSeeds: {},
   });
 
   const runningState = { ...createProductionState(draft), mode: "running" };
@@ -74,6 +80,7 @@ test("saving a running production state preserves the last non-running layout dr
     activeLevelId: 1,
     bestResults: { 1: { elapsed: 40, completed: 10 } },
     drafts: { 1: previousDraft },
+    chapterTwoSeeds: {},
   });
 });
 
@@ -102,6 +109,7 @@ test("restoring the second level keeps its saved draft in design mode without le
     activeLevelId: 2,
     bestResults: {},
     drafts: { 2: draft },
+    chapterTwoSeeds: {},
   });
 
   const refreshed = restoreGameSession(storage);
@@ -120,6 +128,7 @@ test("clearing a session removes persisted progress and returns a new level-one 
     activeLevelId: 3,
     bestResults: { 2: { elapsed: 33.2, completed: 10 } },
     drafts: { 3: draft },
+    chapterTwoSeeds: {},
   });
 
   const session = clearGameSession(storage);
@@ -130,6 +139,7 @@ test("clearing a session removes persisted progress and returns a new level-one 
     activeLevelId: 1,
     bestResults: {},
     drafts: {},
+    chapterTwoSeeds: {},
   });
   assert.equal(session.activeLevelId, 1);
   assert.equal(session.unlockedLevel, 1);
@@ -146,6 +156,7 @@ test("cancelling progress clear preserves the current session and never invokes 
     activeLevelId: 3,
     bestResults: { 2: { elapsed: 33.2, completed: 10 } },
     drafts: { 3: draft },
+    chapterTwoSeeds: {},
   };
   saveGameSave(storage, persisted);
   const currentSession = restoreGameSession(storage);
@@ -199,6 +210,183 @@ test("a newly completed level updates the session result and unlocks its success
   assert.equal(settled.recordBroken, true);
 });
 
+test("chapter boundaries unlock level six and never advance past level ten", () => {
+  const complete = (levelId, unlockedLevel) => {
+    const level = LEVELS[levelId];
+    const scenario = levelId >= 6 ? createOrderScenario(levelId, 1600 + levelId) : null;
+    const runningState = {
+      ...createProductionState(draft, level, scenario),
+      mode: "running",
+    };
+    return applyProductionState({
+      activeLevelId: levelId,
+      unlockedLevel,
+      bestResults: {},
+      design: draft,
+      state: runningState,
+      editedWhilePaused: false,
+      recordBroken: false,
+    }, {
+      ...runningState,
+      mode: "success",
+      elapsed: 30,
+      completed: level.target,
+    }, level);
+  };
+
+  assert.equal(complete(5, 5).unlockedLevel, 6);
+  assert.equal(complete(10, 10).unlockedLevel, 10);
+});
+
+test("chapter-two seed generation prefers crypto and always changes a retry seed", () => {
+  const fixedCrypto = {
+    getRandomValues(values) {
+      values[0] = 1606;
+      return values;
+    },
+  };
+
+  assert.equal(generateChapterTwoSeed(undefined, fixedCrypto), 1606);
+  assert.equal(generateChapterTwoSeed(1606, fixedCrypto), 1607);
+  const fallbackA = generateChapterTwoSeed(undefined, {});
+  const fallbackB = generateChapterTwoSeed(fallbackA, {});
+  assert.notEqual(fallbackB, fallbackA);
+});
+
+test("restoring level six reuses its persisted seed and rebuilds a fresh deterministic scenario", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 6,
+    activeLevelId: 6,
+    bestResults: { 5: { elapsed: 35, completed: 14 } },
+    drafts: { 6: draft },
+    chapterTwoSeeds: { 6: 1606 },
+  });
+  const expectedScenario = createOrderScenario(6, 1606);
+  const first = restoreGameSession(storage);
+  const running = {
+    ...first,
+    state: {
+      ...first.state,
+      mode: "running",
+      elapsed: 12,
+      queue: [first.state.orders[0].id],
+      orders: first.state.orders.map((order, index) =>
+        index === 0 ? { ...order, status: "queued" } : order
+      ),
+    },
+  };
+
+  saveGameSession(storage, running);
+  const refreshed = restoreGameSession(storage);
+
+  assert.equal(refreshed.chapterTwoSeeds[6], 1606);
+  assert.deepEqual(refreshed.scenario, expectedScenario);
+  assert.deepEqual(refreshed.scenario.paletteTypes, expectedScenario.paletteTypes);
+  assert.deepEqual(refreshed.design, draft);
+  assert.deepEqual(refreshed.state, createProductionState(draft, LEVELS[6], expectedScenario));
+  const persisted = loadGameSave(storage);
+  assert.deepEqual(Object.keys(persisted).sort(), [
+    "activeLevelId",
+    "bestResults",
+    "chapterTwoSeeds",
+    "drafts",
+    "unlockedLevel",
+    "version",
+  ]);
+  assert.equal("orders" in persisted, false);
+  assert.equal("queue" in persisted, false);
+});
+
+test("first chapter-two restore persists a seed while every retry replaces it", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 6,
+    activeLevelId: 6,
+    bestResults: {},
+    drafts: { 6: draft },
+    chapterTwoSeeds: {},
+  });
+
+  const restored = restoreGameSession(storage);
+  assert.equal(loadGameSave(storage).chapterTwoSeeds[6], restored.chapterTwoSeeds[6]);
+  const kept = resetGameSession(restored, true);
+  const cleared = resetGameSession(kept, false);
+
+  assert.notEqual(kept.chapterTwoSeeds[6], restored.chapterTwoSeeds[6]);
+  assert.deepEqual(kept.design, draft);
+  assert.deepEqual(kept.scenario, createOrderScenario(6, kept.chapterTwoSeeds[6]));
+  assert.notEqual(cleared.chapterTwoSeeds[6], kept.chapterTwoSeeds[6]);
+  assert.deepEqual(cleared.design, { devices: {}, connections: [] });
+  assert.deepEqual(cleared.state, createProductionState(
+    cleared.design,
+    LEVELS[6],
+    createOrderScenario(6, cleared.chapterTwoSeeds[6]),
+  ));
+});
+
+test("switching levels immediately after a retry keeps the new seed", () => {
+  const storage = memoryStorage();
+  saveGameSave(storage, {
+    version: SAVE_VERSION,
+    unlockedLevel: 7,
+    activeLevelId: 6,
+    bestResults: {},
+    drafts: { 6: draft },
+    chapterTwoSeeds: { 6: 1606, 7: 1707 },
+  });
+  const retried = resetGameSession(restoreGameSession(storage), true);
+  const retrySeed = retried.chapterTwoSeeds[6];
+
+  const onLevelSeven = selectGameLevel(storage, retried, 7).session;
+  const backOnLevelSix = selectGameLevel(storage, onLevelSeven, 6).session;
+
+  assert.notEqual(retrySeed, 1606);
+  assert.equal(backOnLevelSix.chapterTwoSeeds[6], retrySeed);
+  assert.deepEqual(backOnLevelSix.scenario, createOrderScenario(6, retrySeed));
+});
+
+test("session order actions update only valid running queues", () => {
+  const scenario = createOrderScenario(6, 1606);
+  const baseState = createProductionState(draft, LEVELS[6], scenario);
+  const waitingState = {
+    ...baseState,
+    mode: "running",
+    orders: baseState.orders.map((order, index) =>
+      index < 2 ? { ...order, status: "waiting" } : order
+    ),
+  };
+  const running = {
+    activeLevelId: 6,
+    unlockedLevel: 6,
+    bestResults: {},
+    chapterTwoSeeds: { 6: 1606 },
+    scenario,
+    design: draft,
+    state: waitingState,
+  };
+  const firstId = waitingState.orders[0].id;
+  const secondId = waitingState.orders[1].id;
+
+  const firstQueued = enqueueSessionOrder(running, firstId);
+  const secondQueued = enqueueSessionOrder(firstQueued, secondId);
+  const reordered = moveSessionQueuedOrder(secondQueued, secondId, 0);
+
+  assert.deepEqual(firstQueued.state.queue, [firstId]);
+  assert.deepEqual(secondQueued.state.queue, [firstId, secondId]);
+  assert.deepEqual(reordered.state.queue, [secondId, firstId]);
+  assert.strictEqual(enqueueSessionOrder(running, "missing-order"), running);
+  assert.strictEqual(moveSessionQueuedOrder(firstQueued, firstId, 0), firstQueued);
+  assert.strictEqual(enqueueSessionOrder({ ...running, state: baseState }, firstId).state, baseState);
+  const paused = {
+    ...running,
+    state: { ...waitingState, mode: "paused" },
+  };
+  assert.strictEqual(enqueueSessionOrder(paused, firstId), paused);
+});
+
 test("switching to an unlocked level restores its draft as a fresh design session", () => {
   const storage = memoryStorage();
   saveGameSave(storage, {
@@ -207,6 +395,7 @@ test("switching to an unlocked level restores its draft as a fresh design sessio
     activeLevelId: 1,
     bestResults: {},
     drafts: { 2: draft },
+    chapterTwoSeeds: {},
   });
   const current = {
     ...restoreGameSession(storage),
@@ -297,6 +486,7 @@ test("a running session persists only its stable progress fields", () => {
     activeLevelId: 2,
     unlockedLevel: 2,
     bestResults: { 1: { elapsed: 41.5, completed: 10 } },
+    chapterTwoSeeds: {},
     design: draft,
     state: { ...createProductionState(draft), mode: "running", elapsed: 12, completed: 3 },
     editedWhilePaused: false,
@@ -309,6 +499,7 @@ test("a running session persists only its stable progress fields", () => {
     activeLevelId: 2,
     unlockedLevel: 2,
     bestResults: { 1: { elapsed: 41.5, completed: 10 } },
+    chapterTwoSeeds: {},
     design: draft,
     state: { mode: "running" },
   });

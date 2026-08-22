@@ -29,6 +29,7 @@ test("default save state starts at level one with no records or drafts", () => {
     activeLevelId: 1,
     bestResults: {},
     drafts: {},
+    chapterTwoSeeds: {},
   });
 });
 
@@ -40,6 +41,7 @@ test("save serializes and loads the versioned progress shape", () => {
     activeLevelId: 1,
     bestResults: { 1: { elapsed: 36.5, completed: 10 } },
     drafts: { 2: { devices: {}, connections: [] } },
+    chapterTwoSeeds: {},
   };
 
   saveGameSave(storage, state);
@@ -54,6 +56,7 @@ test("active level is retained only when it is unlocked and otherwise falls back
     activeLevelId: 1,
     bestResults: {},
     drafts: {},
+    chapterTwoSeeds: {},
   };
 
   assert.equal(parseGameSave(JSON.stringify({ ...base, activeLevelId: 2 })).activeLevelId, 2);
@@ -69,11 +72,60 @@ test("chapter-two unlock progress survives save validation and reload", () => {
     activeLevelId: 6,
     bestResults: { 5: { elapsed: 36, completed: 14 } },
     drafts: { 6: { devices: {}, connections: [] } },
+    chapterTwoSeeds: { 6: 1606 },
   };
 
   saveGameSave(storage, state);
   assert.deepEqual(loadGameSave(storage), state);
   assert.deepEqual(parseGameSave(serializeGameSave(state)), state);
+});
+
+test("version-one saves migrate progress and layouts without inventing chapter-two seeds", () => {
+  const legacy = {
+    version: 1,
+    unlockedLevel: 5,
+    activeLevelId: 4,
+    bestResults: { 3: { elapsed: 24.5, completed: 12 } },
+    drafts: { 4: { devices: {}, connections: [] } },
+  };
+
+  assert.deepEqual(parseGameSave(JSON.stringify(legacy)), {
+    ...legacy,
+    version: SAVE_VERSION,
+    chapterTwoSeeds: {},
+  });
+});
+
+test("invalid chapter-two seeds are discarded without erasing valid progress", () => {
+  const base = {
+    version: SAVE_VERSION,
+    unlockedLevel: 10,
+    activeLevelId: 8,
+    bestResults: { 5: { elapsed: 35, completed: 14 } },
+    drafts: { 8: { devices: {}, connections: [] } },
+  };
+
+  assert.deepEqual(parseGameSave(JSON.stringify({
+    ...base,
+    chapterTwoSeeds: {
+      5: 5005,
+      6: -1,
+      7: 1.5,
+      8: "1808",
+      9: 4294967296,
+      10: 2010,
+    },
+  })), {
+    ...base,
+    chapterTwoSeeds: { 10: 2010 },
+  });
+  assert.deepEqual(parseGameSave(JSON.stringify({
+    ...base,
+    chapterTwoSeeds: [1606],
+  })), {
+    ...base,
+    chapterTwoSeeds: {},
+  });
 });
 
 test("missing, malformed, incompatible, and corrupted saves fall back safely", () => {
@@ -84,6 +136,7 @@ test("missing, malformed, incompatible, and corrupted saves fall back safely", (
     JSON.stringify({ version: SAVE_VERSION, unlockedLevel: 0, bestResults: {}, drafts: {} }),
     JSON.stringify({ version: SAVE_VERSION, unlockedLevel: 1, bestResults: [], drafts: {} }),
     JSON.stringify({ version: SAVE_VERSION, unlockedLevel: 1, bestResults: {}, drafts: { 1: null } }),
+    JSON.stringify({ version: SAVE_VERSION, unlockedLevel: 11, bestResults: {}, drafts: {}, chapterTwoSeeds: {} }),
   ];
 
   for (const raw of invalidValues) {
@@ -99,6 +152,7 @@ test("clearing a save removes progress and returns a fresh default object", () =
     unlockedLevel: 2,
     bestResults: {},
     drafts: {},
+    chapterTwoSeeds: {},
   }));
 
   assert.deepEqual(clearGameSave(storage), DEFAULT_SAVE_STATE);
@@ -134,6 +188,7 @@ test("uncloneable saves do not overwrite an existing valid save", () => {
     activeLevelId: 1,
     bestResults: {},
     drafts: { 1: { devices: {}, connections: [] } },
+    chapterTwoSeeds: {},
   };
   let stored = serializeGameSave(valid);
   const storage = {

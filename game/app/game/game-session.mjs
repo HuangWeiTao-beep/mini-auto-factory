@@ -1,6 +1,43 @@
-import { LEVELS, createEmptyDesign, createProductionState, nextUnlockedLevel, startProduction } from "./factory-model.mjs";
+import {
+  LEVELS,
+  createEmptyDesign,
+  createProductionState,
+  enqueueProductionOrder,
+  isOrderSchedulingLevel,
+  moveProductionOrder,
+  nextUnlockedLevel,
+  startProduction,
+} from "./factory-model.mjs";
 import { clearGameSave, loadGameSave, saveGameSave } from "./game-save.mjs";
+import { createOrderScenario } from "./order-scheduling.mjs";
 import { markDesignEdited } from "./production-controls.mjs";
+
+let fallbackSeedCounter = 0;
+
+export function generateChapterTwoSeed(previousSeed, cryptoSource) {
+  let seed;
+  try {
+    const source = cryptoSource ?? globalThis.crypto;
+    if (typeof source?.getRandomValues === "function") {
+      const values = new Uint32Array(1);
+      source.getRandomValues(values);
+      seed = values[0];
+    }
+  } catch {
+    // Time plus a monotonic counter keeps retries distinct when crypto is blocked.
+  }
+  if (seed === undefined) {
+    fallbackSeedCounter = (fallbackSeedCounter + 1) >>> 0;
+    seed = ((Date.now() >>> 0) + fallbackSeedCounter) >>> 0;
+  }
+  return seed === previousSeed ? (seed + 1) >>> 0 : seed;
+}
+
+function createSessionScenario(level, seed) {
+  return isOrderSchedulingLevel(level)
+    ? createOrderScenario(level.id, seed)
+    : null;
+}
 
 export function recordBestResult(bestResults, levelId, result) {
   const previous = bestResults[levelId];
@@ -9,15 +46,28 @@ export function recordBestResult(bestResults, levelId, result) {
 }
 
 export function restoreGameSession(storage, selectedLevelId) {
-  const save = loadGameSave(storage);
+  let save = loadGameSave(storage);
   const activeLevelId = selectedLevelId ?? save.activeLevelId;
+  const level = LEVELS[activeLevelId];
+  let chapterTwoSeeds = save.chapterTwoSeeds;
+  if (isOrderSchedulingLevel(level) && chapterTwoSeeds[activeLevelId] === undefined) {
+    chapterTwoSeeds = {
+      ...chapterTwoSeeds,
+      [activeLevelId]: generateChapterTwoSeed(),
+    };
+    save = saveGameSave(storage, { ...save, chapterTwoSeeds });
+    chapterTwoSeeds = save.chapterTwoSeeds;
+  }
   const design = save.drafts[activeLevelId] ?? createEmptyDesign();
+  const scenario = createSessionScenario(level, chapterTwoSeeds[activeLevelId]);
   return {
     activeLevelId,
     unlockedLevel: save.unlockedLevel,
     bestResults: save.bestResults,
+    chapterTwoSeeds,
+    scenario,
     design,
-    state: createProductionState(design),
+    state: createProductionState(design, level, scenario),
   };
 }
 
@@ -50,6 +100,7 @@ export function selectGameLevel(storage, session, levelId) {
   if (!LEVELS[levelId] || levelId > session.unlockedLevel) {
     return { accepted: false, session };
   }
+  saveGameSession(storage, session);
   const restored = restoreGameSession(storage, levelId);
   return {
     accepted: true,
@@ -65,10 +116,13 @@ export function selectGameLevel(storage, session, levelId) {
 
 export function updateGameDesign(session, nextDesign) {
   if (nextDesign === session.design) return session;
+  const level = LEVELS[session.activeLevelId];
   return {
     ...session,
     design: nextDesign,
-    state: session.state.mode === "paused" ? session.state : createProductionState(nextDesign),
+    state: session.state.mode === "paused"
+      ? session.state
+      : createProductionState(nextDesign, level, session.scenario),
     editedWhilePaused: markDesignEdited(
       session.state.mode,
       session.editedWhilePaused,
@@ -93,6 +147,26 @@ export function startGameSession(session, level) {
 
 export function resetGameSession(session, keepDesign) {
   const design = keepDesign ? session.design : createEmptyDesign();
+  const level = LEVELS[session.activeLevelId];
+  if (isOrderSchedulingLevel(level)) {
+    const previousSeed = session.chapterTwoSeeds?.[session.activeLevelId]
+      ?? session.state.scenarioSeed;
+    const seed = generateChapterTwoSeed(previousSeed);
+    const chapterTwoSeeds = {
+      ...(session.chapterTwoSeeds ?? {}),
+      [session.activeLevelId]: seed,
+    };
+    const scenario = createSessionScenario(level, seed);
+    return {
+      ...session,
+      chapterTwoSeeds,
+      scenario,
+      design,
+      state: createProductionState(design, level, scenario),
+      editedWhilePaused: false,
+      recordBroken: false,
+    };
+  }
   return {
     ...session,
     design,
@@ -102,11 +176,24 @@ export function resetGameSession(session, keepDesign) {
   };
 }
 
+export function enqueueSessionOrder(session, orderId) {
+  if (session.state.mode !== "running") return session;
+  const state = enqueueProductionOrder(session.state, orderId);
+  return state === session.state ? session : { ...session, state };
+}
+
+export function moveSessionQueuedOrder(session, orderId, nextIndex) {
+  if (session.state.mode !== "running") return session;
+  const state = moveProductionOrder(session.state, orderId, nextIndex);
+  return state === session.state ? session : { ...session, state };
+}
+
 export function toPersistedGameSession(session) {
   return {
     activeLevelId: session.activeLevelId,
     unlockedLevel: session.unlockedLevel,
     bestResults: session.bestResults,
+    chapterTwoSeeds: session.chapterTwoSeeds ?? {},
     design: session.design,
     state: { mode: session.state.mode },
   };
@@ -123,6 +210,7 @@ export function saveGameSession(storage, session) {
     activeLevelId: session.activeLevelId,
     bestResults: session.bestResults,
     drafts,
+    chapterTwoSeeds: session.chapterTwoSeeds ?? previous.chapterTwoSeeds,
   });
 }
 

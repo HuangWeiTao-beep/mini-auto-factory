@@ -194,4 +194,10 @@ export function moveProductionOrder(
 ): ProductionState;
 export function startProduction(state: ProductionState, options: { edited: boolean; design: FactoryDesign; level: LevelConfig }): ProductionState;
 export function pauseProduction(state: ProductionState): ProductionState;
+export function forecastOrderCompletionTimes(
+  state: ProductionState,
+  design: FactoryDesign,
+  level: LevelConfig,
+  queue?: readonly string[],
+): Map<string, number>;
 export function advanceProduction(state: ProductionState, design: FactoryDesign, level: LevelConfig, deltaSeconds: number): ProductionState;

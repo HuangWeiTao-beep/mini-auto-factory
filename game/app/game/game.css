@@ -111,6 +111,11 @@ button { font: inherit; }
 .order-panel__heading { position: sticky; z-index: 2; top: -16px; padding-top: 14px; background: #e3ddcf; }
 .order-panel__heading small { max-width: 140px; text-align: right; }
 .order-panel__locked { margin: 10px 0 0; padding: 8px 10px; color: #5e6663; border: 1px dashed #8f9793; background: rgba(255,255,255,.32); font: 9px/1.45 var(--font-geist-mono); }
+.scheduling-radar { margin-top: 10px; padding: 10px; border: 1px solid #c66525; background: #fff2df; box-shadow: 2px 3px 0 rgba(126,65,21,.14); }
+.scheduling-radar h2 { margin: 0; color: var(--orange-dark); font: 900 9px var(--font-geist-mono); letter-spacing: .1em; }
+.scheduling-radar p { margin: 6px 0 0; color: #4c4236; font: 9px/1.45 var(--font-geist-mono); }
+.scheduling-radar button { width: 100%; min-height: 29px; margin-top: 8px; color: white; border: 0; background: var(--orange); cursor: pointer; font: 900 9px var(--font-geist-mono); }
+.scheduling-radar button:disabled { opacity: .38; cursor: not-allowed; }
 .order-failure { display: grid; grid-template-columns: 30px 1fr; gap: 8px; margin-top: 10px; padding: 10px; color: #fff; border: 2px solid #87291f; background: #a93629; box-shadow: 3px 4px 0 rgba(65,17,12,.24); }
 .order-failure > span { display: grid; width: 28px; height: 28px; place-items: center; color: #50140d; border-radius: 50%; background: #ffd0c7; font-weight: 900; }
 .order-failure p { margin: 0; }
@@ -131,6 +136,8 @@ button { font: inherit; }
 .order-card--current { border-width: 2px; border-left-width: 6px; background: #e9f7ec; }
 .order-card--urgent { border: 2px solid #a92e22; border-left-width: 6px; background: #fff0eb; }
 .order-card--overdue { border: 2px dashed #7e2118; background: #ead2cc; }
+.order-card--forecast-attention { border-top-color: #b68a1c; border-right-color: #b68a1c; }
+.order-card--forecast-danger, .order-card--forecast-late { border-top: 2px solid #a92e22; border-right: 2px solid #a92e22; }
 .order-card__heading { display: grid; grid-template-columns: 24px 1fr auto; gap: 7px; align-items: center; }
 .order-card__heading > span { display: grid; width: 22px; height: 22px; place-items: center; color: white; background: var(--steel); font-size: 11px; }
 .order-card__heading small { display: block; color: #7a827f; font: 7px var(--font-geist-mono); }
@@ -142,6 +149,10 @@ button { font: inherit; }
 .order-card__deadline strong { color: #343b39; }
 .order-card__urgent { margin: 7px 0 0; padding: 5px 6px; color: #852319; border: 1px solid #c44839; background: #ffd8ce; font: 900 8px var(--font-geist-mono); }
 .order-card__urgent span { margin-right: 5px; }
+.order-card__route-alert, .order-card__forecast { margin: 7px 0 0; padding: 5px 6px; font: 900 8px/1.35 var(--font-geist-mono); }
+.order-card__route-alert { color: #7e2118; border: 1px solid #c44839; background: #ffe0d8; }
+.order-card__forecast { color: #4c5c58; border-top: 1px dashed rgba(48,58,55,.28); background: rgba(255,255,255,.28); }
+.order-card--forecast-danger .order-card__forecast, .order-card--forecast-late .order-card__forecast { color: #852319; }
 .order-card > button { width: 100%; min-height: 30px; margin-top: 8px; color: white; border: 0; background: var(--orange); cursor: pointer; font: 900 9px var(--font-geist-mono); }
 .order-card > button:disabled, .order-card__queue-controls button:disabled { opacity: .38; cursor: not-allowed; }
 .order-card__queue-controls { display: grid; grid-template-columns: 1fr 30px 30px; gap: 5px; align-items: center; margin-top: 8px; }

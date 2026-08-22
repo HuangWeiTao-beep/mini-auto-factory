@@ -18,6 +18,7 @@ import {
   enqueueSessionOrder,
   generateChapterTwoSeed,
   moveSessionQueuedOrder,
+  prioritizeSessionOrder,
   recordBestResult,
   resolveClearProgressDecision,
   restoreGameSession,
@@ -465,6 +466,40 @@ test("session order actions update only valid running queues", () => {
       secondQueued,
     );
   }
+});
+
+test("prioritizing a waiting order inserts it at the front of a running queue", () => {
+  const scenario = createOrderScenario(6, 1606);
+  const baseState = createProductionState(draft, LEVELS[6], scenario);
+  const waitingState = {
+    ...baseState,
+    mode: "running",
+    orders: baseState.orders.map((order, index) =>
+      index < 2 ? { ...order, status: "waiting" } : order,
+    ),
+  };
+  const session = {
+    activeLevelId: 6,
+    unlockedLevel: 6,
+    bestResults: {},
+    chapterTwoSeeds: { 6: 1606 },
+    scenario,
+    design: draft,
+    state: waitingState,
+  };
+  const firstId = waitingState.orders[0].id;
+  const urgentId = waitingState.orders[1].id;
+  const queued = enqueueSessionOrder(session, firstId);
+
+  const prioritized = prioritizeSessionOrder(queued, urgentId);
+
+  assert.deepEqual(prioritized.state.queue, [urgentId, firstId]);
+  assert.equal(
+    prioritized.state.orders.find((order) => order.id === urgentId)?.status,
+    "queued",
+  );
+  const inactive = { ...session, state: baseState };
+  assert.strictEqual(prioritizeSessionOrder(inactive, urgentId), inactive);
 });
 
 test("switching to an unlocked level restores its draft as a fresh design session", () => {

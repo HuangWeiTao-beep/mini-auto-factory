@@ -6,6 +6,7 @@ import {
   clearGameSession,
   enqueueSessionOrder,
   moveSessionQueuedOrder,
+  prioritizeSessionOrder,
   resetGameSession,
   restoreGameSession,
   saveGameSession,
@@ -175,6 +176,15 @@ export function useGameSession(options: {
     [moveOrder],
   );
 
+  const prioritizeOrder = useCallback((orderId: string) => {
+    const current = sessionRef.current;
+    const next = prioritizeSessionOrder(current, orderId);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
   const selectLevel = useCallback((levelId: number) => {
     const selected = selectGameLevel(undefined, session, levelId);
     if (!selected.accepted) return false;
@@ -200,6 +210,7 @@ export function useGameSession(options: {
     enqueueOrder,
     moveOrderUp,
     moveOrderDown,
+    prioritizeOrder,
     selectLevel,
     clearProgress,
   };

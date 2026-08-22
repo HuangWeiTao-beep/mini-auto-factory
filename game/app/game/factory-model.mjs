@@ -1001,6 +1001,41 @@ function tickOrderScheduling(state, design, level, delta) {
   settleOverdueOrders(state);
 }
 
+export function forecastOrderCompletionTimes(state, design, level, queue = state.queue ?? []) {
+  if (!isOrderSchedulingLevel(level) || !Array.isArray(state.orders)) return new Map();
+
+  const forecast = clone(state);
+  const queuedIds = new Set(queue);
+  const lastDeadline = Math.max(
+    forecast.elapsed,
+    ...forecast.orders.map((order) => order.deadlineAt),
+  );
+  const horizon = lastDeadline + level.duration;
+  forecast.mode = "running";
+  forecast.failure = null;
+  forecast.queue = [...queue];
+  forecast.orders = forecast.orders.map((order) => ({
+    ...order,
+    deadlineAt: horizon + 1,
+    status: queuedIds.has(order.id) && order.status === "waiting" ? "queued" : order.status,
+  }));
+
+  const completionTimes = new Map(
+    forecast.orders
+      .filter((order) => order.status === "completed")
+      .map((order) => [order.id, forecast.elapsed]),
+  );
+  while (forecast.elapsed < horizon && forecast.mode === "running") {
+    tickOrderScheduling(forecast, design, level, level.step);
+    for (const order of forecast.orders) {
+      if (order.status === "completed" && !completionTimes.has(order.id)) {
+        completionTimes.set(order.id, forecast.elapsed);
+      }
+    }
+  }
+  return completionTimes;
+}
+
 function tick(state, design, level, delta) {
   state.elapsed = round(state.elapsed + delta);
 

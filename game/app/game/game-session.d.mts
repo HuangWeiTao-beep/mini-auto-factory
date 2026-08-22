@@ -68,6 +68,7 @@ export function moveSessionQueuedOrder(
   orderId: string,
   nextIndex: number,
 ): GameSession;
+export function prioritizeSessionOrder(session: GameSession, orderId: string): GameSession;
 export function toPersistedGameSession(session: PersistableGameSession): PersistedGameSession;
 export function saveGameSession(storage: GameSaveStorage | undefined, session: PersistableGameSession): GameSaveState;
 export function clearGameSession(storage?: GameSaveStore): RestoredGameSession;

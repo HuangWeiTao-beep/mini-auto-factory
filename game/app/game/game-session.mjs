@@ -215,6 +215,13 @@ export function moveSessionQueuedOrder(session, orderId, nextIndex) {
   return state === session.state ? session : { ...session, state };
 }
 
+export function prioritizeSessionOrder(session, orderId) {
+  if (session.state.mode !== "running") return session;
+  const enqueued = enqueueProductionOrder(session.state, orderId);
+  const state = moveProductionOrder(enqueued, orderId, 0);
+  return state === session.state ? session : { ...session, state };
+}
+
 export function toPersistedGameSession(session) {
   return {
     activeLevelId: session.activeLevelId,

@@ -17,6 +17,7 @@ import type { DeviceType } from "./factory-model.mjs";
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, getSuccessSettlement } from "./production-controls.mjs";
+import { getSchedulingFeedback } from "./scheduling-feedback.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import { OrderPanel } from "./OrderPanel";
@@ -62,6 +63,7 @@ export function MiniFactoryGame() {
     enqueueOrder,
     moveOrderUp,
     moveOrderDown,
+    prioritizeOrder,
     selectLevel: selectSessionLevel,
     clearProgress,
   } = useGameSession({ onRestored: handleSessionRestore });
@@ -74,6 +76,18 @@ export function MiniFactoryGame() {
     .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
   const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
   const chapterTwo = level.chapter === 2;
+  const feedbackCacheKey = `${Math.floor(state.elapsed * 2)}:${(state.orders ?? []).map((order) => `${order.id}:${order.status}`).join("|")}:${(state.queue ?? []).join("|")}`;
+  const schedulingFeedback = chapterTwo
+    ? getSchedulingFeedback({
+        design,
+        level,
+        state,
+        orders: state.orders ?? [],
+        queue: state.queue ?? [],
+        elapsed: state.elapsed,
+        cacheKey: feedbackCacheKey,
+      })
+    : null;
   const locked = state.mode === "running";
   const remaining = Math.max(0, level.duration - state.elapsed);
   const completion = (state.completed / level.target) * 100;
@@ -369,10 +383,12 @@ export function MiniFactoryGame() {
             queue={state.queue ?? []}
             elapsed={state.elapsed}
             failure={state.failure}
+            feedback={schedulingFeedback}
             actionsEnabled={state.mode === "running"}
             onEnqueue={enqueueOrder}
             onMoveUp={moveOrderUp}
             onMoveDown={moveOrderDown}
+            onPrioritize={prioritizeOrder}
           />
         )}
       </div>

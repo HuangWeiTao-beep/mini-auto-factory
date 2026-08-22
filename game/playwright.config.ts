@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const e2ePort = process.env.E2E_PORT ?? "4175";
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -8,7 +10,7 @@ export default defineConfig({
   reporter: "list",
   globalSetup: "./e2e/global-setup.ts",
   use: {
-    baseURL: "http://localhost:4175",
+    baseURL: `http://localhost:${e2ePort}`,
     browserName: "chromium",
     trace: "on-first-retry",
   },

@@ -125,13 +125,12 @@ export function MiniFactoryGame() {
     contextualFeedback?.message ?? state.warning,
     toast,
   );
-  const failureDiagnostic = state.failure
-    ? `订单 ${state.failure.orderId} 已逾期 ${state.failure.overdueSeconds.toFixed(1)} 秒。排程不是玄学，先把临期单往前挪。`
-    : getFailureDiagnostic(
-        state.warning,
-        contextualFeedback?.message,
-        level.routeHint,
-      );
+  const failureDiagnostic = getFailureDiagnostic(
+    state.warning,
+    contextualFeedback?.message,
+    level.routeHint,
+    state.failure,
+  );
   const productionActionLabel = getProductionActionLabel(state.mode, editedWhilePaused);
 
   useEffect(() => {

@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:net";
 
-const baseUrl = "http://localhost:4175";
-const port = 4175;
+const port = Number.parseInt(process.env.E2E_PORT ?? "4175", 10);
+const baseUrl = `http://localhost:${port}`;
 
 async function assertPortAvailable() {
   await new Promise<void>((resolve, reject) => {

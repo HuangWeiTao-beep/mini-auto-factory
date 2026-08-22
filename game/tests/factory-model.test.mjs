@@ -804,17 +804,26 @@ test("an incomplete design fails exactly at the sixty second limit", () => {
   assert.equal(state.completed, 0);
 });
 
-test("chapter-two levels do not advance through the legacy production loop", () => {
-  const design = createLevelTwoDesign(true);
-  const forcedRunning = {
-    ...createProductionState(design),
-    mode: "running",
-  };
+test("legacy createProductionState keeps the exact chapter-one state contract", () => {
+  const design = createDesign(["source", "cutter"]);
 
-  const afterAdvance = advanceProduction(forcedRunning, design, LEVELS[6], 70);
-
-  assert.equal(afterAdvance, forcedRunning);
-  assert.equal(afterAdvance.mode, "running");
-  assert.equal(afterAdvance.completed, 0);
-  assert.equal(afterAdvance.elapsed, 0);
+  assert.deepEqual(createProductionState(design), {
+    mode: "design",
+    elapsed: 0,
+    completed: 0,
+    sources: { source: { elapsed: 0, output: null, pulse: 0 } },
+    machines: {
+      cutter: {
+        status: "idle",
+        active: null,
+        remaining: 0,
+        waiting: null,
+        output: null,
+        warning: null,
+      },
+    },
+    routingCursor: { source: 0, cutter: 0 },
+    lines: {},
+    warning: null,
+  });
 });

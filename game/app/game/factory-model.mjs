@@ -5,7 +5,13 @@ import {
   manhattanDistance,
   snapToGrid,
 } from "./factory-grid.mjs";
-import { ORDER_SCENARIO_RULES } from "./order-scheduling.mjs";
+import {
+  ORDER_SCENARIO_RULES,
+  PRODUCTS,
+  activateArrivedOrders,
+  enqueueWaitingOrder,
+  moveQueuedOrder,
+} from "./order-scheduling.mjs";
 
 const createDeviceSpec = (label, accepts, produces, duration, icon, eyebrow) =>
   Object.freeze({
@@ -386,14 +392,17 @@ export function connectDevices(design, from, to, level = LEVEL_CONFIG) {
     return design;
   }
   const connectionRules = level.connectionRules ?? DEFAULT_CONNECTION_RULES;
+  const allowsRecipeRouting = isOrderSchedulingLevel(level);
   if (
     !connectionRules.allowsParallelOutputs &&
+    !allowsRecipeRouting &&
     design.connections.some((connection) => connection.from === from)
   ) {
     return design;
   }
   if (
     !connectionRules.allowsParallelInputs &&
+    !allowsRecipeRouting &&
     design.connections.some((connection) => connection.to === to)
   ) {
     return design;
@@ -423,7 +432,7 @@ export function removeConnection(design, connectionId) {
     : { ...design, connections };
 }
 
-export function createProductionState(design) {
+export function createProductionState(design, level, scenario) {
   const sources = {};
   const machines = {};
   for (const device of Object.values(design.devices)) {
@@ -447,7 +456,7 @@ export function createProductionState(design) {
       { ...connection, item: null },
     ]),
   );
-  return {
+  const baseState = {
     mode: "design",
     elapsed: 0,
     completed: 0,
@@ -459,11 +468,63 @@ export function createProductionState(design) {
     lines,
     warning: null,
   };
+  if (!isOrderSchedulingLevel(level)) return baseState;
+
+  return {
+    ...baseState,
+    orders: clone(scenario?.orders ?? []),
+    queue: [...(scenario?.queue ?? [])],
+    completedOrderIds: [],
+    failure: null,
+    scenarioSeed: scenario?.seed ?? null,
+    scenarioLevelId: scenario?.levelId ?? level.id,
+  };
+}
+
+function asOrderScenario(state) {
+  return {
+    levelId: state.scenarioLevelId,
+    seed: state.scenarioSeed,
+    orders: state.orders,
+    queue: state.queue,
+  };
+}
+
+export function enqueueProductionOrder(state, orderId) {
+  if (!state.orders || !state.queue) return state;
+  const scenario = asOrderScenario(state);
+  const nextScenario = enqueueWaitingOrder(scenario, orderId);
+  return nextScenario === scenario
+    ? state
+    : { ...state, orders: nextScenario.orders, queue: nextScenario.queue };
+}
+
+export function moveProductionOrder(state, orderId, nextIndex) {
+  if (!state.orders || !state.queue) return state;
+  const order = state.orders.find((candidate) => candidate.id === orderId);
+  if (order?.status !== "queued") return state;
+  const scenario = asOrderScenario(state);
+  const nextScenario = moveQueuedOrder(scenario, orderId, nextIndex);
+  return nextScenario === scenario ? state : { ...state, queue: nextScenario.queue };
 }
 
 export function startProduction(state, options = {}) {
   if (isOrderSchedulingLevel(options.level)) {
-    return createProductionState(options.design ?? { devices: {}, connections: [] });
+    if (!Array.isArray(state.orders)) {
+      return createProductionState(
+        options.design ?? { devices: {}, connections: [] },
+      );
+    }
+    if (["success", "failure"].includes(state.mode)) return state;
+    if (!options.edited) return { ...state, mode: "running" };
+    return {
+      ...createProductionState(
+        options.design ?? { devices: {}, connections: [] },
+        options.level,
+        asOrderScenario(state),
+      ),
+      mode: "running",
+    };
   }
   if (options.edited) {
     return {
@@ -487,8 +548,18 @@ export function outgoing(design, deviceId) {
     .sort((a, b) => a.branchIndex - b.branchIndex);
 }
 
-function selectOutgoingLine(state, design, deviceId) {
-  const connections = outgoing(design, deviceId);
+function selectOutgoingLine(state, design, deviceId, material = null) {
+  const allConnections = outgoing(design, deviceId);
+  const product = material?.productId ? PRODUCTS[material.productId] : null;
+  const expectedType = product?.route[material.recipeStepIndex];
+  const matchingConnections = expectedType
+    ? allConnections.filter(
+        (connection) => design.devices[connection.to]?.type === expectedType,
+      )
+    : [];
+  const connections = matchingConnections.length
+    ? matchingConnections
+    : allConnections;
   if (connections.length === 0) return null;
   const cursor = state.routingCursor[deviceId] ?? 0;
   const connection = connections[cursor % connections.length];
@@ -500,6 +571,9 @@ function deliverToTarget(state, design, level, line) {
   const item = line.item;
   const device = design.devices[line.to];
   if (!item || !device) return false;
+  if (isOrderSchedulingLevel(level)) {
+    return deliverOrderMaterial(state, design, level, line, item, device);
+  }
   const spec = DEVICE_TYPES[device.type];
 
   if (device.type === "exit" && item.kind === "undrilledBolt") {
@@ -547,12 +621,12 @@ function deliverToTarget(state, design, level, line) {
   return false;
 }
 
-function trySend(state, design, level, deviceId, kind, clearOutput) {
-  const connection = selectOutgoingLine(state, design, deviceId);
+function trySend(state, design, level, deviceId, material, clearOutput) {
+  const connection = selectOutgoingLine(state, design, deviceId, material);
   if (!connection) return false;
   const line = state.lines[connection.id];
   line.item = {
-    kind,
+    ...(typeof material === "string" ? { kind: material } : material),
     progress: 0,
     status: "moving",
     transportDuration: getTransportDuration(
@@ -572,6 +646,216 @@ function outputFor(level, type) {
   return type === "lathe" && level.id >= 2
     ? "undrilledBolt"
     : DEVICE_TYPES[type].produces;
+}
+
+function orderMaterial(item) {
+  return {
+    kind: item.kind,
+    orderId: item.orderId,
+    productId: item.productId,
+    recipeStepIndex: item.recipeStepIndex,
+  };
+}
+
+function orderMaterialOutput(type) {
+  return {
+    cutter: "blank",
+    lathe: "bolt",
+    drill: "bolt",
+    coater: "coatedBolt",
+  }[type];
+}
+
+function updateOrderStatus(state, orderId, status) {
+  state.orders = state.orders.map((order) =>
+    order.id === orderId ? { ...order, status } : order,
+  );
+}
+
+function orderRouteContext(state, item) {
+  const order = state.orders.find((candidate) => candidate.id === item.orderId);
+  const product = PRODUCTS[order?.productId ?? item.productId];
+  return {
+    order,
+    product,
+    expectedType: product?.route[item.recipeStepIndex],
+    validIdentity:
+      Boolean(order && product) &&
+      order.productId === item.productId &&
+      order.status === "inProduction",
+  };
+}
+
+function rejectOrderMaterial(state, line, item, device, context) {
+  item.status = "blocked";
+  const productLabel = context.product?.label ?? item.productId ?? "未知产品";
+  const expectedLabel = DEVICE_TYPES[context.expectedType]?.label ?? "正确工序";
+  const warning = `订单 ${item.orderId}（${productLabel}）下一工序应为${expectedLabel}，${DEVICE_TYPES[device.type].label}无法接收。`;
+  state.warning = warning;
+  const machine = state.machines[device.id];
+  if (machine) {
+    machine.warning = warning;
+    machine.status = "warning";
+  }
+  line.item = item;
+  return false;
+}
+
+function deliverOrderMaterial(state, design, level, line, item, device) {
+  const context = orderRouteContext(state, item);
+  if (!context.validIdentity || context.expectedType !== device.type) {
+    return rejectOrderMaterial(state, line, item, device, context);
+  }
+
+  if (device.type === "exit") {
+    line.item = null;
+    updateOrderStatus(state, item.orderId, "completed");
+    if (!state.completedOrderIds.includes(item.orderId)) {
+      state.completedOrderIds.push(item.orderId);
+    }
+    state.completed = state.completedOrderIds.length;
+    if (
+      state.orders.length > 0 &&
+      state.orders.every((order) => order.status === "completed")
+    ) {
+      state.mode = "success";
+    }
+    return true;
+  }
+
+  const machine = state.machines[device.id];
+  const material = orderMaterial(item);
+  if (!machine.active && !machine.output) {
+    machine.active = material;
+    machine.remaining = level.machineDurations[device.type];
+    machine.status = "working";
+    line.item = null;
+    return true;
+  }
+  if (!machine.waiting) {
+    machine.waiting = material;
+    line.item = null;
+    return true;
+  }
+  item.status = "waiting";
+  return false;
+}
+
+function activateOrders(state) {
+  const scenario = asOrderScenario(state);
+  const activated = activateArrivedOrders(scenario, state.elapsed);
+  if (activated !== scenario) state.orders = activated.orders;
+}
+
+function tickOrderSources(state, level, delta) {
+  for (const source of Object.values(state.sources)) {
+    source.elapsed = round(source.elapsed + delta);
+    source.pulse = Math.max(0, source.pulse - delta);
+    if (source.elapsed + 1e-9 < level.sourceInterval) continue;
+    source.elapsed = round(source.elapsed - level.sourceInterval);
+    if (source.output || state.queue.length === 0) continue;
+
+    const orderId = state.queue[0];
+    const order = state.orders.find((candidate) => candidate.id === orderId);
+    if (order?.status !== "queued" || !PRODUCTS[order.productId]) continue;
+    state.queue.shift();
+    updateOrderStatus(state, orderId, "inProduction");
+    source.output = {
+      kind: "rod",
+      orderId,
+      productId: order.productId,
+      recipeStepIndex: 1,
+    };
+    source.pulse = 0.25;
+  }
+}
+
+function settleOverdueOrders(state) {
+  const overdue = state.orders
+    .filter(
+      (order) =>
+        order.status !== "completed" &&
+        order.status !== "overdue" &&
+        state.elapsed + 1e-9 >= order.deadlineAt,
+    )
+    .sort((left, right) => left.deadlineAt - right.deadlineAt);
+  if (overdue.length === 0) return;
+
+  const overdueIds = new Set(overdue.map((order) => order.id));
+  state.orders = state.orders.map((order) =>
+    overdueIds.has(order.id) ? { ...order, status: "overdue" } : order,
+  );
+  const first = overdue[0];
+  state.failure = {
+    orderId: first.id,
+    productId: first.productId,
+    overdueSeconds: round(Math.max(0, state.elapsed - first.deadlineAt)),
+  };
+  state.mode = "failure";
+}
+
+function tickOrderScheduling(state, design, level, delta) {
+  state.elapsed = round(state.elapsed + delta);
+  activateOrders(state);
+  tickOrderSources(state, level, delta);
+
+  for (const line of Object.values(state.lines)) {
+    if (line.item?.status === "moving") {
+      line.item.progress = Math.min(
+        1,
+        line.item.progress + delta / line.item.transportDuration,
+      );
+    }
+  }
+
+  for (const [id, machine] of Object.entries(state.machines)) {
+    if (!machine.active) continue;
+    machine.remaining = Math.max(0, machine.remaining - delta);
+    if (machine.remaining > 1e-9) continue;
+    machine.output = {
+      ...machine.active,
+      kind: orderMaterialOutput(design.devices[id].type),
+      recipeStepIndex: machine.active.recipeStepIndex + 1,
+    };
+    machine.active = null;
+    machine.remaining = 0;
+    machine.status = "ready";
+  }
+
+  for (const line of Object.values(state.lines)) {
+    if (
+      (line.item?.status === "moving" && line.item.progress >= 1 - 1e-9) ||
+      line.item?.status === "waiting"
+    ) {
+      deliverToTarget(state, design, level, line);
+      if (state.mode === "success") return;
+    }
+  }
+
+  for (const [id, source] of Object.entries(state.sources)) {
+    if (source.output) {
+      trySend(state, design, level, id, source.output, () => {
+        source.output = null;
+      });
+    }
+  }
+
+  for (const [id, machine] of Object.entries(state.machines)) {
+    if (machine.output) {
+      trySend(state, design, level, id, machine.output, () => {
+        machine.output = null;
+        machine.status = "idle";
+      });
+    }
+    if (!machine.active && !machine.output && machine.waiting) {
+      machine.active = machine.waiting;
+      machine.waiting = null;
+      machine.remaining = level.machineDurations[design.devices[id].type];
+      machine.status = "working";
+    }
+  }
+
+  settleOverdueOrders(state);
 }
 
 function tick(state, design, level, delta) {
@@ -654,13 +938,16 @@ export function advanceProduction(state, design, level, deltaSeconds) {
     deltaSeconds = level;
     level = LEVEL_CONFIG;
   }
-  if (isOrderSchedulingLevel(level)) return state;
   if (state.mode !== "running" || deltaSeconds <= 0) return state;
   const next = clone(state);
   let remaining = Math.min(deltaSeconds, level.duration - next.elapsed);
   while (remaining > 1e-9 && next.mode === "running") {
     const delta = Math.min(level.step, remaining);
-    tick(next, design, level, delta);
+    if (isOrderSchedulingLevel(level)) {
+      tickOrderScheduling(next, design, level, delta);
+    } else {
+      tick(next, design, level, delta);
+    }
     remaining -= delta;
   }
   return next;

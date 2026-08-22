@@ -5,6 +5,14 @@ export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt" | "coatedB
 export type GameMode = "design" | "running" | "paused" | "success" | "failure";
 export type TransportMode = "fixed" | "distance";
 export type LevelMode = "production" | "orderScheduling";
+export type ProductId = "standard" | "precision" | "rustproof";
+export type OrderStatus =
+  | "scheduled"
+  | "waiting"
+  | "queued"
+  | "inProduction"
+  | "completed"
+  | "overdue";
 
 export interface ConnectionRules {
   allowsParallelInputs: boolean;
@@ -65,9 +73,42 @@ export interface FactoryDesign {
   connections: Connection[];
 }
 
+export interface ProductionOrder {
+  id: string;
+  levelId: number;
+  productId: ProductId;
+  arrivesAt: number;
+  deadlineAt: number;
+  status: OrderStatus;
+}
+
+export interface ProductionScenario {
+  levelId: number;
+  seed: string | number;
+  paletteTypes: readonly LevelDeviceType[];
+  orders: readonly ProductionOrder[];
+  queue: readonly string[];
+}
+
+export interface OrderMaterial {
+  kind: MaterialType;
+  orderId: string;
+  productId: ProductId;
+  recipeStepIndex: number;
+}
+
+export interface OrderFailure {
+  orderId: string;
+  productId: ProductId;
+  overdueSeconds: number;
+}
+
 export interface LineState extends Connection {
   item: null | {
     kind: MaterialType;
+    orderId?: string;
+    productId?: ProductId;
+    recipeStepIndex?: number;
     progress: number;
     status: string;
     transportDuration: number;
@@ -76,7 +117,7 @@ export interface LineState extends Connection {
 
 export interface SourceState {
   elapsed: number;
-  output: MaterialType | null;
+  output: MaterialType | OrderMaterial | null;
   pulse: number;
 }
 
@@ -87,15 +128,21 @@ export interface ProductionState {
   sources: Record<string, SourceState>;
   machines: Record<string, {
     status: string;
-    active: MaterialType | null;
+    active: MaterialType | OrderMaterial | null;
     remaining: number;
-    waiting: MaterialType | null;
-    output: MaterialType | null;
+    waiting: MaterialType | OrderMaterial | null;
+    output: MaterialType | OrderMaterial | null;
     warning: string | null;
   }>;
   routingCursor: Record<string, number>;
   lines: Record<string, LineState>;
   warning: string | null;
+  orders?: ProductionOrder[];
+  queue?: string[];
+  completedOrderIds?: string[];
+  failure?: OrderFailure | null;
+  scenarioSeed?: string | number | null;
+  scenarioLevelId?: number;
 }
 
 export const DEVICE_TYPES: Record<DeviceType, {
@@ -127,7 +174,20 @@ export function canPlaceDevice(design: FactoryDesign, level: LevelConfig, cell: 
 export function connectDevices(design: FactoryDesign, from: string, to: string, level?: LevelConfig): FactoryDesign;
 export function removeConnection(design: FactoryDesign, connectionId: string): FactoryDesign;
 export function outgoing(design: FactoryDesign, deviceId: string): Connection[];
-export function createProductionState(design: FactoryDesign): ProductionState;
+export function createProductionState(
+  design: FactoryDesign,
+  level?: LevelConfig,
+  scenario?: ProductionScenario,
+): ProductionState;
+export function enqueueProductionOrder(
+  state: ProductionState,
+  orderId: string,
+): ProductionState;
+export function moveProductionOrder(
+  state: ProductionState,
+  orderId: string,
+  nextIndex: number,
+): ProductionState;
 export function startProduction(state: ProductionState, options: { edited: boolean; design: FactoryDesign; level: LevelConfig }): ProductionState;
 export function pauseProduction(state: ProductionState): ProductionState;
 export function advanceProduction(state: ProductionState, design: FactoryDesign, level: LevelConfig, deltaSeconds: number): ProductionState;

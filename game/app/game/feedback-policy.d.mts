@@ -1,4 +1,4 @@
-import type { GameMode } from "./factory-model.mjs";
+import type { GameMode, OrderFailure } from "./factory-model.mjs";
 
 export function getPlayerFeedback(
   mode: GameMode,
@@ -10,4 +10,5 @@ export function getFailureDiagnostic(
   warning: string | null,
   contextualFeedback: string | null | undefined,
   routeHint: string,
+  orderFailure?: OrderFailure | null,
 ): string;

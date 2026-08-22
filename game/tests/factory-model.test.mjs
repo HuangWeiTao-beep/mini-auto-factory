@@ -191,6 +191,20 @@ test("level helpers expose limits and unlock only the next chapter level", () =>
   assert.equal(nextUnlockedLevel(5, 5), 6);
 });
 
+test("level six lets the lathe split standard and precision order routes", () => {
+  let design = createEmptyDesign();
+  for (const [index, type] of ["source", "cutter", "lathe", "drill", "exit"].entries()) {
+    design = addDevice(design, type, (index + 1) * 180, 72, type);
+  }
+  design = connectDevices(design, "source", "cutter", LEVELS[6]);
+  design = connectDevices(design, "cutter", "lathe", LEVELS[6]);
+  design = connectDevices(design, "lathe", "exit", LEVELS[6]);
+  design = connectDevices(design, "lathe", "drill", LEVELS[6]);
+
+  assert.equal(LEVELS[6].connectionRules.allowsParallelOutputs, true);
+  assert.equal(design.connections.length, 4);
+});
+
 test("the five level configurations match the approved chapter-one rules", () => {
   const summary = [1, 2, 3, 4, 5].map((levelId) => {
     const level = LEVELS[levelId];
@@ -348,7 +362,7 @@ test("levels six through ten expose the approved chapter-two configuration shell
       transportMode: "fixed",
       machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
       obstacles: [],
-      connectionRules: { allowsParallelInputs: false, allowsParallelOutputs: false },
+      connectionRules: { allowsParallelInputs: false, allowsParallelOutputs: true },
       paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
       orderConfig: {
         orderCount: 6,

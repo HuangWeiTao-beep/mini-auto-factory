@@ -204,7 +204,9 @@ export const LEVELS = Object.freeze({
     sourceInterval: 3,
     machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2 },
     obstacles: [],
-    connectionRules: DEFAULT_CONNECTION_RULES,
+    connectionRules: {
+      allowsParallelOutputs: true,
+    },
     paletteTypes: ORDER_SCENARIO_RULES[6].paletteTypes,
     orderConfig: ORDER_SCENARIO_RULES[6],
     step: 0.01,

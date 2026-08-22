@@ -168,6 +168,10 @@ export function getDeviceLimit(level: LevelConfig, type: LevelDeviceType): numbe
 export function getTransportDuration(level: LevelConfig, from: GridCell, to: GridCell): number;
 export function nextUnlockedLevel(unlockedLevel: number, completedLevelId: number): number;
 export function createEmptyDesign(): FactoryDesign;
+export function createOrderScenario(
+  levelId: number,
+  seed: string | number,
+): ProductionScenario;
 export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y: number, id?: string): FactoryDesign;
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;
 export function canPlaceDevice(design: FactoryDesign, level: LevelConfig, cell: GridCell, ignoredDeviceId?: string | null): boolean;

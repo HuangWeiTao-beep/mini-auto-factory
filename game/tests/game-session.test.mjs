@@ -7,8 +7,11 @@ import {
   saveGameSave,
   serializeGameSave,
 } from "../app/game/game-save.mjs";
-import { LEVELS, createProductionState } from "../app/game/factory-model.mjs";
-import { createOrderScenario } from "../app/game/order-scheduling.mjs";
+import {
+  LEVELS,
+  createOrderScenario,
+  createProductionState,
+} from "../app/game/factory-model.mjs";
 import {
   applyProductionState,
   clearGameSession,

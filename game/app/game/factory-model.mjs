@@ -9,7 +9,8 @@ import {
   ORDER_SCENARIO_RULES,
   PRODUCTS,
   activateArrivedOrders,
-  createOrderScenario,
+  createOrderScenarioCandidate,
+  createSafeOrderScenarioCandidate,
   enqueueWaitingOrder,
   moveQueuedOrder,
 } from "./order-scheduling.mjs";
@@ -260,7 +261,7 @@ export const LEVELS = Object.freeze({
     routeHint: "钻孔与镀层争抢节拍，瓶颈这位老朋友又来了。",
     duration: 85,
     target: ORDER_SCENARIO_RULES[9].orderCount,
-    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 1, exit: 1 },
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 1, exit: 1 },
     transportMode: "distance",
     transportDuration: 0.5,
     sourceInterval: 1,
@@ -286,7 +287,7 @@ export const LEVELS = Object.freeze({
     routeHint: "所有单型一起上，调度要是乱了就别怪看板嘲笑你。",
     duration: 90,
     target: ORDER_SCENARIO_RULES[10].orderCount,
-    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 2, exit: 1 },
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 2, coater: 1, exit: 1 },
     transportMode: "distance",
     transportDuration: 0.5,
     sourceInterval: 1,
@@ -508,6 +509,140 @@ export function moveProductionOrder(state, orderId, nextIndex) {
   const scenario = asOrderScenario(state);
   const nextScenario = moveQueuedOrder(scenario, orderId, nextIndex);
   return nextScenario === scenario ? state : { ...state, queue: nextScenario.queue };
+}
+
+const SCENARIO_VALIDATION_POSITIONS = Object.freeze({
+  source: [1, 6],
+  exit: [16, 2],
+  "cutter-1": [6, 6],
+  "cutter-2": [1, 2],
+  "lathe-1": [11, 6],
+  "lathe-2": [6, 2],
+  "drill-1": [11, 2],
+  "drill-2": [16, 6],
+  "coater-1": [11, 10],
+});
+
+const MAX_RANDOM_SCENARIO_ATTEMPTS = 64;
+const MAX_SAFE_SCENARIO_ATTEMPTS = 16;
+const scenarioCache = new Map();
+
+function createScenarioValidationDesign(level) {
+  let design = createEmptyDesign();
+  const machineIds = { cutter: [], lathe: [], drill: [], coater: [] };
+  for (const [id, type] of [["source", "source"], ["exit", "exit"]]) {
+    const [gridX, gridY] = SCENARIO_VALIDATION_POSITIONS[id];
+    design = addDevice(design, type, gridX * GRID.cellSize, gridY * GRID.cellSize, id);
+  }
+  for (const type of Object.keys(machineIds)) {
+    for (let index = 0; index < (level.deviceLimits[type] ?? 0); index += 1) {
+      const id = `${type}-${index + 1}`;
+      const [gridX, gridY] = SCENARIO_VALIDATION_POSITIONS[id];
+      machineIds[type].push(id);
+      design = addDevice(
+        design,
+        type,
+        gridX * GRID.cellSize,
+        gridY * GRID.cellSize,
+        id,
+      );
+    }
+  }
+  for (const cutterId of machineIds.cutter) {
+    design = connectDevices(design, "source", cutterId, level);
+  }
+  for (const [index, cutterId] of machineIds.cutter.entries()) {
+    design = connectDevices(
+      design,
+      cutterId,
+      machineIds.lathe[index % machineIds.lathe.length],
+      level,
+    );
+  }
+  for (const latheId of machineIds.lathe) {
+    design = connectDevices(design, latheId, "exit", level);
+    for (const drillId of machineIds.drill) {
+      design = connectDevices(design, latheId, drillId, level);
+    }
+    for (const coaterId of machineIds.coater) {
+      design = connectDevices(design, latheId, coaterId, level);
+    }
+  }
+  for (const drillId of machineIds.drill) {
+    design = connectDevices(design, drillId, "exit", level);
+  }
+  for (const coaterId of machineIds.coater) {
+    design = connectDevices(design, coaterId, "exit", level);
+  }
+  return design;
+}
+
+function enqueueScenarioOrdersByDeadline(state) {
+  let next = state;
+  const waiting = next.orders
+    .filter((order) => order.status === "waiting")
+    .sort((left, right) => left.deadlineAt - right.deadlineAt);
+  for (const order of waiting) {
+    next = enqueueProductionOrder(next, order.id);
+  }
+  const deadlineOrder = next.queue
+    .map((orderId) => next.orders.find((order) => order.id === orderId))
+    .sort((left, right) => left.deadlineAt - right.deadlineAt);
+  for (const [index, order] of deadlineOrder.entries()) {
+    next = moveProductionOrder(next, order.id, index);
+  }
+  return { ...next, queue: [...next.queue] };
+}
+
+function scenarioCompletesWithSupportedSchedule(level, scenario) {
+  const design = createScenarioValidationDesign(level);
+  let state = createProductionState(design, level, scenario);
+  state.mode = "running";
+  while (state.mode === "running" && state.elapsed < level.duration) {
+    tickOrderScheduling(state, design, level, level.step);
+    state = enqueueScenarioOrdersByDeadline(state);
+  }
+  return state.mode === "success" && state.completed === scenario.orders.length;
+}
+
+export function createOrderScenario(levelId, seed) {
+  const level = LEVELS[levelId];
+  if (!isOrderSchedulingLevel(level)) {
+    throw new RangeError(`No order scheduling rule for level ${levelId}.`);
+  }
+  const cacheKey = `${levelId}:${typeof seed}:${String(seed)}`;
+  const cached = scenarioCache.get(cacheKey);
+  if (cached) return cached;
+
+  for (let attempt = 0; attempt < MAX_RANDOM_SCENARIO_ATTEMPTS; attempt += 1) {
+    const candidate = createOrderScenarioCandidate(levelId, seed, attempt);
+    if (scenarioCompletesWithSupportedSchedule(level, candidate)) {
+      scenarioCache.set(cacheKey, candidate);
+      return candidate;
+    }
+  }
+  for (let attempt = 0; attempt < MAX_SAFE_SCENARIO_ATTEMPTS; attempt += 1) {
+    const candidate = createSafeOrderScenarioCandidate(
+      levelId,
+      seed,
+      `${seed}:attempt:${attempt}`,
+    );
+    if (scenarioCompletesWithSupportedSchedule(level, candidate)) {
+      scenarioCache.set(cacheKey, candidate);
+      return candidate;
+    }
+  }
+
+  const fallback = createSafeOrderScenarioCandidate(
+    levelId,
+    seed,
+    `verified-fallback:${levelId}`,
+  );
+  if (!scenarioCompletesWithSupportedSchedule(level, fallback)) {
+    throw new Error(`No feasible order scenario fallback for level ${levelId}.`);
+  }
+  scenarioCache.set(cacheKey, fallback);
+  return fallback;
 }
 
 export function startProduction(state, options = {}) {

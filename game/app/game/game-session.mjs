@@ -1,5 +1,6 @@
 import {
   LEVELS,
+  createOrderScenario,
   createEmptyDesign,
   createProductionState,
   enqueueProductionOrder,
@@ -9,7 +10,6 @@ import {
   startProduction,
 } from "./factory-model.mjs";
 import { clearGameSave, loadGameSave, saveGameSave } from "./game-save.mjs";
-import { createOrderScenario } from "./order-scheduling.mjs";
 import { markDesignEdited } from "./production-controls.mjs";
 
 let fallbackSeedCounter = 0;

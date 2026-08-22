@@ -45,7 +45,16 @@ export const PRODUCTS: Readonly<Record<ProductId, ProductDefinition>>;
 export const ORDER_SCENARIO_RULES: Readonly<Record<number, OrderScenarioRule>>;
 export function getProduct(productId: ProductId): ProductDefinition;
 export function createSeededRandom(seed: string | number): () => number;
-export function createOrderScenario(levelId: number, seed: string | number): OrderScenario;
+export function createOrderScenarioCandidate(
+  levelId: number,
+  seed: string | number,
+  attempt?: number,
+): OrderScenario;
+export function createSafeOrderScenarioCandidate(
+  levelId: number,
+  seed: string | number,
+  candidateSeed: string | number,
+): OrderScenario;
 export function shufflePaletteTypes(
   paletteTypes: readonly PaletteType[],
   seed: string | number,

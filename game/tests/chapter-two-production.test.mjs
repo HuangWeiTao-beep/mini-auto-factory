@@ -8,6 +8,7 @@ import {
   canPlaceDevice,
   connectDevices,
   createEmptyDesign,
+  createOrderScenario,
   createProductionState,
   enqueueProductionOrder,
   getTransportDuration,
@@ -15,7 +16,6 @@ import {
   pauseProduction,
   startProduction,
 } from "../app/game/factory-model.mjs";
-import { createOrderScenario } from "../app/game/order-scheduling.mjs";
 import { getFailureDiagnostic } from "../app/game/feedback-policy.mjs";
 
 const FIXED_LEVEL_SEEDS = Object.freeze({
@@ -430,6 +430,27 @@ test("levels six through ten complete their fixed scenarios with deadline-first 
   }
 });
 
+test("chapter-two generation screens varied retry seeds for deadline-first completion", () => {
+  const retrySeeds = [0, 1, 4, 7, 11, 42, 255, 1024, 1606, 0x7fffffff, 0xffffffff];
+
+  for (const levelId of [6, 7, 8, 9, 10]) {
+    const level = LEVELS[levelId];
+    const design = createRecipeDesign(level);
+    assertRecipeDesignIsLegal(design, level);
+    for (const seed of retrySeeds) {
+      const scenario = createOrderScenario(levelId, seed);
+      const completed = simulateScheduledScenario(design, level, scenario);
+
+      assert.equal(
+        completed.mode,
+        "success",
+        `level ${levelId}, retry seed ${seed}: ${JSON.stringify(completed.failure)}`,
+      );
+      assert.equal(completed.completed, scenario.orders.length);
+    }
+  }
+});
+
 test("editing a paused chapter-two attempt restarts the same seed from pristine orders", () => {
   const level = LEVELS[6];
   const design = createRecipeDesign(level);
@@ -437,7 +458,7 @@ test("editing a paused chapter-two attempt restarts the same seed from pristine 
   let state = startScenario(design, level, scenario);
   state = advanceProduction(state, design, level, scenario.orders[0].arrivesAt);
   state = enqueueProductionOrder(state, scenario.orders[0].id);
-  state = advanceProduction(state, design, level, 1);
+  state = advanceProduction(state, design, level, level.sourceInterval);
   assert.equal(state.orders[0].status, "inProduction");
 
   const restarted = startProduction(pauseProduction(state), {

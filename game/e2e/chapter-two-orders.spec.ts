@@ -49,14 +49,18 @@ test("level six schedules fixed orders, keeps the line locked, and unlocks level
   await page.getByTestId("queue-up-L6-01").click();
   await expect(page.getByTestId("order-queue-L6-01")).toContainText("#1");
   await expect(page.getByTestId("queue-down-L6-01")).toBeEnabled();
+  await page.getByTestId("enqueue-order-L6-03").click();
 
   await advanceGameTime(page, 6);
-  await page.getByTestId("enqueue-order-L6-03").click();
-  await advanceGameTime(page, 4);
   await page.getByTestId("enqueue-order-L6-04").click();
-  await advanceGameTime(page, 20);
+  await advanceGameTime(page, 4);
+  await page.getByTestId("enqueue-order-L6-05").click();
+  await page.getByTestId("enqueue-order-L6-06").click();
+  await advanceGameTime(page, 30);
 
-  await expect(page.getByRole("dialog", { name: "第 6 关完成！" })).toBeVisible();
+  const successDialog = page.getByRole("dialog", { name: "第 6 关完成！" });
+  await expect(successDialog).toBeVisible();
+  await expect(successDialog).toContainText("全部订单按时完成");
   await expect.poll(() => page.evaluate(() => {
     const save = JSON.parse(localStorage.getItem("mini-factory-save") ?? "{}");
     return [save.unlockedLevel, save.chapterTwoSeeds?.[6]];
@@ -92,6 +96,10 @@ test("level eight routes a fixed rustproof order through the coater branch", asy
 
   await page.getByRole("button", { name: "开始生产" }).click();
   await advanceGameTime(page, 8);
+  await expect(page.getByTestId("order-waiting-L8-01")).toHaveCSS(
+    "border-left-color",
+    "rgb(52, 115, 74)",
+  );
   await page.getByTestId("enqueue-order-L8-01").click();
   await page.getByTestId("enqueue-order-L8-02").click();
   await advanceGameTime(page, 11);
@@ -105,7 +113,7 @@ test("level eight routes a fixed rustproof order through the coater branch", asy
   await expect(page.locator(".factory-floor .machine--coater")).toHaveClass(/machine--working/);
   await advanceGameTime(page, 5);
 
-  await expect(page.getByTestId("order-completed-count")).toHaveText("5/6");
+  await expect(page.getByTestId("order-completed-count")).toHaveText("5/8");
   await expect(page.locator(".order-section--completed")).toContainText("L8-05");
   await expect(page.getByTestId("order-failure")).toHaveCount(0);
 });

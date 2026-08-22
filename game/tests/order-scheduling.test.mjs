@@ -3,13 +3,13 @@ import test from "node:test";
 
 import {
   LEVELS,
+  createOrderScenario,
   getAllowedPaletteTypes,
   isOrderSchedulingLevel,
 } from "../app/game/factory-model.mjs";
 import {
   PRODUCTS,
   activateArrivedOrders,
-  createOrderScenario,
   createSeededRandom,
   enqueueWaitingOrder,
   getProduct,
@@ -118,116 +118,51 @@ test("chapter-two level helpers identify order scheduling stages", () => {
   assert.equal(isOrderSchedulingLevel(10), true);
 });
 
-test("fixed seeds lock the chapter-two order table design", () => {
-  const summaries = [6, 7, 8, 9, 10].map((levelId) => {
+test("chapter-two scenarios honor the approved order matrix", () => {
+  const approvedMatrix = {
+    6: { orderCount: 6, arrivalWindow: [0, 24], deadlineLeadWindow: [22, 22] },
+    7: { orderCount: 8, arrivalWindow: [0, 30], deadlineLeadWindow: [18, 26] },
+    8: { orderCount: 8, arrivalWindow: [0, 34], deadlineLeadWindow: [24, 32] },
+    9: { orderCount: 10, arrivalWindow: [0, 42], deadlineLeadWindow: [22, 34] },
+    10: { orderCount: 12, arrivalWindow: [0, 50], deadlineLeadWindow: [20, 32] },
+  };
+
+  for (const [levelIdText, expected] of Object.entries(approvedMatrix)) {
+    const levelId = Number(levelIdText);
     const scenario = createOrderScenario(levelId, FIXED_LEVEL_SEEDS[levelId]);
-    return {
-      levelId,
-      orderCount: scenario.orders.length,
-      paletteTypes: scenario.paletteTypes,
-      products: [...new Set(scenario.orders.map((order) => order.productId))],
-      arrivalWindow: [
-        Math.min(...scenario.orders.map((order) => order.arrivesAt)),
-        Math.max(...scenario.orders.map((order) => order.arrivesAt)),
-      ],
-      orders: scenario.orders.map((order) => ({
-        id: order.id,
-        productId: order.productId,
-        arrivesAt: order.arrivesAt,
-        deadlineAt: order.deadlineAt,
-      })),
-    };
-  });
 
-  assert.deepEqual(summaries, [
-    {
-      levelId: 6,
-      orderCount: 4,
-      paletteTypes: ["lathe", "source", "cutter", "drill", "exit"],
-      products: ["standard", "precision"],
-      arrivalWindow: [8, 21],
-      orders: [
-        { id: "L6-01", productId: "standard", arrivesAt: 8, deadlineAt: 30 },
-        { id: "L6-02", productId: "standard", arrivesAt: 11, deadlineAt: 33 },
-        { id: "L6-03", productId: "precision", arrivesAt: 17, deadlineAt: 39 },
-        { id: "L6-04", productId: "precision", arrivesAt: 21, deadlineAt: 43 },
-      ],
-    },
-    {
-      levelId: 7,
-      orderCount: 5,
-      paletteTypes: ["cutter", "drill", "lathe", "source", "exit"],
-      products: ["precision", "standard"],
-      arrivalWindow: [3, 30],
-      orders: [
-        { id: "L7-01", productId: "precision", arrivesAt: 3, deadlineAt: 29 },
-        { id: "L7-02", productId: "precision", arrivesAt: 11, deadlineAt: 30 },
-        { id: "L7-03", productId: "precision", arrivesAt: 14, deadlineAt: 38 },
-        { id: "L7-04", productId: "standard", arrivesAt: 21, deadlineAt: 39 },
-        { id: "L7-05", productId: "standard", arrivesAt: 30, deadlineAt: 56 },
-      ],
-    },
-    {
-      levelId: 8,
-      orderCount: 6,
-      paletteTypes: ["source", "drill", "exit", "cutter", "lathe", "coater"],
-      products: ["standard", "precision", "rustproof"],
-      arrivalWindow: [4, 35],
-      orders: [
-        { id: "L8-01", productId: "standard", arrivesAt: 4, deadlineAt: 36 },
-        { id: "L8-02", productId: "standard", arrivesAt: 8, deadlineAt: 37 },
-        { id: "L8-03", productId: "precision", arrivesAt: 19, deadlineAt: 46 },
-        { id: "L8-04", productId: "precision", arrivesAt: 19, deadlineAt: 50 },
-        { id: "L8-05", productId: "rustproof", arrivesAt: 28, deadlineAt: 53 },
-        { id: "L8-06", productId: "rustproof", arrivesAt: 35, deadlineAt: 62 },
-      ],
-    },
-    {
-      levelId: 9,
-      orderCount: 6,
-      paletteTypes: ["exit", "drill", "source", "cutter", "lathe", "coater"],
-      products: ["standard", "rustproof", "precision"],
-      arrivalWindow: [2, 29],
-      orders: [
-        { id: "L9-01", productId: "standard", arrivesAt: 2, deadlineAt: 30 },
-        { id: "L9-02", productId: "standard", arrivesAt: 9, deadlineAt: 35 },
-        { id: "L9-03", productId: "rustproof", arrivesAt: 17, deadlineAt: 49 },
-        { id: "L9-04", productId: "rustproof", arrivesAt: 23, deadlineAt: 55 },
-        { id: "L9-05", productId: "precision", arrivesAt: 23, deadlineAt: 57 },
-        { id: "L9-06", productId: "precision", arrivesAt: 29, deadlineAt: 53 },
-      ],
-    },
-    {
-      levelId: 10,
-      orderCount: 7,
-      paletteTypes: ["exit", "coater", "drill", "source", "cutter", "lathe"],
-      products: ["standard", "precision", "rustproof"],
-      arrivalWindow: [4, 33],
-      orders: [
-        { id: "L10-01", productId: "standard", arrivesAt: 4, deadlineAt: 36 },
-        { id: "L10-02", productId: "precision", arrivesAt: 6, deadlineAt: 29 },
-        { id: "L10-03", productId: "rustproof", arrivesAt: 13, deadlineAt: 44 },
-        { id: "L10-04", productId: "precision", arrivesAt: 22, deadlineAt: 43 },
-        { id: "L10-05", productId: "rustproof", arrivesAt: 24, deadlineAt: 53 },
-        { id: "L10-06", productId: "standard", arrivesAt: 32, deadlineAt: 57 },
-        { id: "L10-07", productId: "rustproof", arrivesAt: 33, deadlineAt: 57 },
-      ],
-    },
-  ]);
+    assert.equal(scenario.orders.length, expected.orderCount);
+    assert.deepEqual(LEVELS[levelId].orderConfig.arrivalWindow, expected.arrivalWindow);
+    assert.deepEqual(
+      LEVELS[levelId].orderConfig.deadlineLeadWindow,
+      expected.deadlineLeadWindow,
+    );
+    for (const order of scenario.orders) {
+      const deadlineLead = order.deadlineAt - order.arrivesAt;
+      assert.ok(order.arrivesAt >= expected.arrivalWindow[0]);
+      assert.ok(order.arrivesAt <= expected.arrivalWindow[1]);
+      assert.ok(deadlineLead >= expected.deadlineLeadWindow[0]);
+      assert.ok(deadlineLead <= expected.deadlineLeadWindow[1]);
+    }
+  }
+});
 
+test("every chapter-two seed keeps the intended product mix", () => {
   for (const levelId of [6, 7]) {
-    const productIds = summaries.find((summary) => summary.levelId === levelId).products;
+    const productIds = new Set(
+      createOrderScenario(levelId, FIXED_LEVEL_SEEDS[levelId]).orders.map(
+        (order) => order.productId,
+      ),
+    );
     assert.deepEqual([...productIds].sort(), ["precision", "standard"]);
   }
 
   for (const levelId of [8, 9, 10]) {
-    const productIds = summaries.find((summary) => summary.levelId === levelId).products;
+    const productIds = new Set(
+      createOrderScenario(levelId, FIXED_LEVEL_SEEDS[levelId]).orders.map(
+        (order) => order.productId,
+      ),
+    );
     assert.deepEqual([...productIds].sort(), ["precision", "rustproof", "standard"]);
-  }
-
-  for (const summary of summaries) {
-    for (const order of summary.orders) {
-      assert.ok(order.deadlineAt > order.arrivesAt);
-    }
   }
 });

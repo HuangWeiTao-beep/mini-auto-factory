@@ -49,36 +49,36 @@ const freezeRule = (rule) =>
 
 export const ORDER_SCENARIO_RULES = Object.freeze({
   6: freezeRule({
-    orderCount: 4,
-    arrivalWindow: [4, 26],
+    orderCount: 6,
+    arrivalWindow: [0, 24],
     deadlineLeadWindow: [22, 22],
     productPool: ["standard", "precision"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
   }),
   7: freezeRule({
-    orderCount: 5,
-    arrivalWindow: [3, 30],
+    orderCount: 8,
+    arrivalWindow: [0, 30],
     deadlineLeadWindow: [18, 26],
     productPool: ["standard", "precision"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
   }),
   8: freezeRule({
-    orderCount: 6,
-    arrivalWindow: [2, 36],
+    orderCount: 8,
+    arrivalWindow: [0, 34],
     deadlineLeadWindow: [24, 32],
     productPool: ["standard", "precision", "rustproof"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
   }),
   9: freezeRule({
-    orderCount: 6,
-    arrivalWindow: [2, 34],
+    orderCount: 10,
+    arrivalWindow: [0, 42],
     deadlineLeadWindow: [22, 34],
     productPool: ["standard", "precision", "rustproof"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
   }),
   10: freezeRule({
-    orderCount: 7,
-    arrivalWindow: [1, 38],
+    orderCount: 12,
+    arrivalWindow: [0, 50],
     deadlineLeadWindow: [20, 32],
     productPool: ["standard", "precision", "rustproof"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
@@ -193,18 +193,52 @@ export function shufflePaletteTypes(paletteTypes, seed) {
   return shuffleWithRandom(paletteTypes, createSeededRandom(`palette:${seed}`));
 }
 
-export function createOrderScenario(levelId, seed) {
-  const rule = getScenarioRule(levelId);
-  const random = createSeededRandom(`orders:${levelId}:${seed}`);
+function createScenario(levelId, seed, rule, orders) {
   return Object.freeze({
     levelId,
     seed,
     paletteTypes: Object.freeze(
       shufflePaletteTypes(rule.paletteTypes, `${levelId}:${seed}`),
     ),
-    orders: Object.freeze(buildOrders(levelId, rule, random)),
+    orders: Object.freeze(orders),
     queue: Object.freeze([]),
   });
+}
+
+export function createOrderScenarioCandidate(levelId, seed, attempt = 0) {
+  const rule = getScenarioRule(levelId);
+  const candidateSeed = attempt === 0
+    ? `orders:${levelId}:${seed}`
+    : `orders:${levelId}:${seed}:attempt:${attempt}`;
+  return createScenario(
+    levelId,
+    seed,
+    rule,
+    buildOrders(levelId, rule, createSeededRandom(candidateSeed)),
+  );
+}
+
+export function createSafeOrderScenarioCandidate(levelId, seed, candidateSeed) {
+  const rule = getScenarioRule(levelId);
+  const random = createSeededRandom(`safe-orders:${levelId}:${candidateSeed}`);
+  const products = buildProductSequence(rule, random);
+  const [minArrival, maxArrival] = rule.arrivalWindow;
+  const arrivalSpan = maxArrival - minArrival;
+  const maxDeadlineLead = rule.deadlineLeadWindow[1];
+  const orders = products.map((productId, index) => {
+    const arrivesAt = rule.orderCount === 1
+      ? minArrival
+      : Math.round(minArrival + (arrivalSpan * index) / (rule.orderCount - 1));
+    return Object.freeze({
+      id: `L${levelId}-${String(index + 1).padStart(2, "0")}`,
+      levelId,
+      productId,
+      arrivesAt,
+      deadlineAt: round(arrivesAt + maxDeadlineLead),
+      status: "scheduled",
+    });
+  });
+  return createScenario(levelId, seed, rule, orders);
 }
 
 export function activateArrivedOrders(scenario, elapsed) {

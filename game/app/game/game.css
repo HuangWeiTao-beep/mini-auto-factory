@@ -126,7 +126,7 @@ button { font: inherit; }
 .order-card { padding: 9px; border: 1px solid rgba(27,32,31,.22); border-left: 4px solid #777f7c; background: rgba(255,255,255,.55); box-shadow: 2px 3px 0 rgba(26,31,30,.08); }
 .order-card--standard { border-left-color: #5c8c91; }
 .order-card--precision { border-left-color: var(--orange); }
-.order-card--rustproof { border-left-color: #856aa4; }
+.order-card--rustproof { border-left-color: #34734a; }
 .order-card--queued { background: #fff7e6; }
 .order-card--current { border-width: 2px; border-left-width: 6px; background: #e9f7ec; }
 .order-card--urgent { border: 2px solid #a92e22; border-left-width: 6px; background: #fff0eb; }

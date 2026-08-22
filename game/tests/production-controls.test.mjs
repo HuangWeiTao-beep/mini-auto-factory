@@ -70,8 +70,12 @@ test("chapter boundary settlements keep completion copy and expose only valid ne
     message: "工坊验收稳定运行，第一章全部验收通过。第 6 关已解锁。",
     nextLevelId: 6,
   });
+  assert.deepEqual(controls.getSuccessSettlement(LEVELS[6], 10), {
+    message: "订单看板全部订单按时完成，第 7 关已解锁。",
+    nextLevelId: 7,
+  });
   assert.deepEqual(controls.getSuccessSettlement(LEVELS[10], 10), {
-    message: "总装排程稳定运行，第二章全部验收通过。",
+    message: "总装排程全部订单按时完成，第二章全部验收通过。",
     nextLevelId: null,
   });
 });

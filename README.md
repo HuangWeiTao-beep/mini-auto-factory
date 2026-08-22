@@ -88,4 +88,4 @@ npm.cmd run test:e2e
 
 ## 当前状态
 
-v0.2 已合并到 `master` 并发布为线上站点 v4。后续开发请从当前 `master` 创建独立分支；设计和实施记录可从 [`docs/`](docs/) 查阅。
+v0.2 当前是 `codex/chapter-two-order-scheduling` 分支上的发布候选，尚未宣称已合并到 `master` 或部署到线上。完成验证、合并和站点部署并读回确认后，再更新这里的发布状态；设计和实施记录可从 [`docs/`](docs/) 查阅。

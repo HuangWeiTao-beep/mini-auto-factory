@@ -57,3 +57,21 @@ test("unchanged pause resumes while a fresh attempt starts production", async ()
     false,
   );
 });
+
+test("chapter boundary settlements keep completion copy and expose only valid next actions", async () => {
+  const controls = await import("../app/game/production-controls.mjs").catch(() => ({}));
+  assert.equal(
+    typeof controls.getSuccessSettlement,
+    "function",
+    "success settlement behavior must be evaluated rather than source-matched",
+  );
+
+  assert.deepEqual(controls.getSuccessSettlement(LEVELS[5], 10), {
+    message: "工坊验收稳定运行，第一章全部验收通过。第 6 关已解锁。",
+    nextLevelId: 6,
+  });
+  assert.deepEqual(controls.getSuccessSettlement(LEVELS[10], 10), {
+    message: "总装排程稳定运行，第二章全部验收通过。",
+    nextLevelId: null,
+  });
+});

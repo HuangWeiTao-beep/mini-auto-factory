@@ -1,4 +1,4 @@
-import type { FactoryDesign, GameMode } from "./factory-model.mjs";
+import type { FactoryDesign, GameMode, LevelConfig } from "./factory-model.mjs";
 
 export function markDesignEdited(
   mode: GameMode,
@@ -11,3 +11,8 @@ export function getProductionActionLabel(
   mode: GameMode,
   editedWhilePaused: boolean,
 ): "开始生产" | "继续生产" | "重新开始生产";
+
+export function getSuccessSettlement(
+  level: LevelConfig,
+  maxLevelId: number,
+): { message: string; nextLevelId: number | null };

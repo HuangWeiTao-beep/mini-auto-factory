@@ -16,7 +16,7 @@ import {
 import type { DeviceType } from "./factory-model.mjs";
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
-import { getProductionActionLabel } from "./production-controls.mjs";
+import { getProductionActionLabel, getSuccessSettlement } from "./production-controls.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
 import { OrderPanel } from "./OrderPanel";
@@ -78,8 +78,8 @@ export function MiniFactoryGame() {
   const remaining = Math.max(0, level.duration - state.elapsed);
   const completion = (state.completed / level.target) * 100;
   const maxLevelId = Math.max(...Object.keys(LEVELS).map(Number));
-  const hasNextLevel = activeLevelId < maxLevelId;
-  const chapterCompletionCopy = level.chapter === 1 ? "第一章全部验收通过。" : "第二章全部验收通过。";
+  const successSettlement = getSuccessSettlement(level, maxLevelId);
+  const nextLevelId = successSettlement.nextLevelId;
   const activeBestResult = bestResults[activeLevelId];
   const settlementOpen = state.mode === "success" || state.mode === "failure";
   const overlayOpen = showLevelSelect || showOnboarding || settlementOpen || showClearProgressConfirm;
@@ -435,9 +435,7 @@ export function MiniFactoryGame() {
             <div className="settlement-icon">{state.mode === "success" ? "✓" : "!"}</div>
             <h2 id="settlement-title">{state.mode === "success" ? `第 ${activeLevelId} 关完成！` : `第 ${activeLevelId} 关未完成`}</h2>
             <p>{state.mode === "success"
-              ? hasNextLevel
-                ? `${level.name}稳定运行，第 ${activeLevelId + 1} 关已解锁。`
-                : `${level.name}稳定运行，${chapterCompletionCopy}`
+              ? successSettlement.message
               : failureDiagnostic}</p>
             <div className="settlement-stats">
               <div><small>{chapterTwo ? "完成订单" : "合格螺栓"}</small><strong>{state.completed} / {level.target}</strong></div>
@@ -452,8 +450,8 @@ export function MiniFactoryGame() {
             )}
             <div className="settlement-actions">
               <button className="settlement-primary" onClick={() => resetAttempt(true)} autoFocus>重新挑战</button>
-              {state.mode === "success" && hasNextLevel && (
-                <button onClick={() => selectLevel(activeLevelId + 1)}>下一关</button>
+              {state.mode === "success" && nextLevelId && (
+                <button onClick={() => selectLevel(nextLevelId)}>下一关</button>
               )}
               <button onClick={openLevelSelect}>返回关卡选择</button>
             </div>

@@ -119,18 +119,18 @@ test("critical controls keep keyboard cancellation, modal focus and running-stat
   assert.match(machine, /disabled=\{locked\}/);
 });
 
-test("settlement copy follows the active level and advances through the full level catalog", async () => {
+test("settlement UI consumes the evaluated message and next-level action", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
     "utf8",
   );
   assert.match(game, /level\.routeHint/);
   assert.match(game, /state\.completed\} \/ \{level\.target/);
-  assert.match(game, /第 \$\{activeLevelId \+ 1\} 关已解锁/);
-  assert.match(game, /第一章全部验收通过/);
-  assert.match(game, /第二章全部验收通过/);
-  assert.match(game, /const hasNextLevel = activeLevelId < maxLevelId/);
-  assert.match(game, /state\.mode === "success" && hasNextLevel/);
+  assert.match(game, /getSuccessSettlement\(level, maxLevelId\)/);
+  assert.match(game, /successSettlement\.message/);
+  assert.match(game, /const nextLevelId = successSettlement\.nextLevelId/);
+  assert.match(game, /state\.mode === "success" && nextLevelId/);
+  assert.match(game, /selectLevel\(nextLevelId\)/);
 });
 
 test("completed levels expose their best time and success settlement calls out a new record", async () => {
@@ -243,8 +243,7 @@ test("chapter two uses scenario palette order and chapter-aware level copy", asy
 
   assert.match(game, /scenario\?\.paletteTypes \?\? level\.paletteTypes/);
   assert.match(game, /CHAPTER \$\{level\.chapter === 1 \? "ONE" : "TWO"\}/);
-  assert.match(game, /const hasNextLevel = activeLevelId < maxLevelId/);
-  assert.match(game, /第二章全部验收通过/);
+  assert.match(game, /getSuccessSettlement\(level, maxLevelId\)/);
   assert.match(machine, /coater:\s*"◌"/);
   assert.match(machine, /镀层成为防锈螺栓/);
   assert.match(levelSelect, /第一章：产线基础/);

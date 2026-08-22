@@ -16,6 +16,7 @@ export interface OrderConfig {
   arrivalWindow: readonly [number, number];
   deadlineLeadWindow: readonly [number, number];
   productPool: readonly ("standard" | "precision" | "rustproof")[];
+  paletteTypes: readonly LevelDeviceType[];
 }
 
 export interface GridCell {

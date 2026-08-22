@@ -61,6 +61,21 @@ test("active level is retained only when it is unlocked and otherwise falls back
   assert.equal(parseGameSave(JSON.stringify({ ...base, activeLevelId: 0 })).activeLevelId, 1);
 });
 
+test("chapter-two unlock progress survives save validation and reload", () => {
+  const storage = memoryStorage();
+  const state = {
+    version: SAVE_VERSION,
+    unlockedLevel: 6,
+    activeLevelId: 6,
+    bestResults: { 5: { elapsed: 36, completed: 14 } },
+    drafts: { 6: { devices: {}, connections: [] } },
+  };
+
+  saveGameSave(storage, state);
+  assert.deepEqual(loadGameSave(storage), state);
+  assert.deepEqual(parseGameSave(serializeGameSave(state)), state);
+});
+
 test("missing, malformed, incompatible, and corrupted saves fall back safely", () => {
   const invalidValues = [
     null,

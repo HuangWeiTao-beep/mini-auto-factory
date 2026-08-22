@@ -803,3 +803,18 @@ test("an incomplete design fails exactly at the sixty second limit", () => {
   assert.equal(state.elapsed, 60);
   assert.equal(state.completed, 0);
 });
+
+test("chapter-two levels do not advance through the legacy production loop", () => {
+  const design = createLevelTwoDesign(true);
+  const forcedRunning = {
+    ...createProductionState(design),
+    mode: "running",
+  };
+
+  const afterAdvance = advanceProduction(forcedRunning, design, LEVELS[6], 70);
+
+  assert.equal(afterAdvance, forcedRunning);
+  assert.equal(afterAdvance.mode, "running");
+  assert.equal(afterAdvance.completed, 0);
+  assert.equal(afterAdvance.elapsed, 0);
+});

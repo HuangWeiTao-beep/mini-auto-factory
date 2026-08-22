@@ -37,9 +37,33 @@
 
 ## Commit hash
 
-- Current HEAD before local commit: `d17eacef2931af4d443c33618e5d2d25d18ef7e4`
+- Feature commit: `44dc7b16ec2378b0d7f90d279e3ddbe87bca7a64`
 
 ## Concerns
 
 - `coater` is now modeled in metadata and level definitions, but chapter-two runtime material flow is intentionally not implemented in Task 1; later tasks still need to decide how coated output integrates with production execution and persistence.
-- Local commit creation requires sandbox escalation because the worktree index lock lives outside writable roots.
+
+## Fix round 1
+
+### Findings addressed
+
+- Blocked chapter-two levels from entering or advancing through the legacy chapter-one production loop by guarding `startProduction(...)` and `advanceProduction(...)` when `level.mode === "orderScheduling"`.
+- Expanded save validation to accept and normalize unlocked/active levels up to the current max level derived from `LEVELS`, so 6-10 progression survives persistence.
+- Synced `factory-model.d.mts` so `OrderConfig` now declares the runtime `paletteTypes` field.
+
+### Additional files touched
+
+- `game/app/game/game-save.mjs`
+- `game/tests/game-session.test.mjs`
+- `game/tests/game-save.test.mjs`
+
+### Verification
+
+- Command: `cd game && node --test tests/factory-model.test.mjs tests/game-session.test.mjs tests/game-save.test.mjs`
+- Result on 2026-08-22: 53 tests passed, 0 failed.
+- Command: `cd game && node --test tests/order-scheduling.test.mjs tests/factory-model.test.mjs tests/game-session.test.mjs tests/game-save.test.mjs`
+- Result on 2026-08-22: 60 tests passed, 0 failed.
+
+### Notes
+
+- This safety boundary intentionally keeps chapter-two sessions in design mode until Task 2 provides the real order-scheduling runtime.

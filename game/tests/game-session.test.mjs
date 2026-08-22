@@ -252,6 +252,25 @@ test("editing a paused session makes its next start a fresh production attempt",
   assert.equal(restarted.editedWhilePaused, false);
 });
 
+test("starting a chapter-two session keeps it out of the legacy production mode", () => {
+  const session = {
+    activeLevelId: 6,
+    unlockedLevel: 6,
+    bestResults: {},
+    design: draft,
+    state: createProductionState(draft),
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+
+  const restarted = startGameSession(session, LEVELS[6]);
+
+  assert.equal(restarted.state.mode, "design");
+  assert.equal(restarted.state.elapsed, 0);
+  assert.equal(restarted.state.completed, 0);
+  assert.equal(restarted.editedWhilePaused, false);
+});
+
 test("resetting a session without its layout creates an empty design attempt", () => {
   const runningState = { ...createProductionState(draft), mode: "running", elapsed: 12, completed: 3 };
   const session = {

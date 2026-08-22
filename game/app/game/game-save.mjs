@@ -1,5 +1,8 @@
+import { LEVELS } from "./factory-model.mjs";
+
 export const SAVE_VERSION = 1;
 export const SAVE_STORAGE_KEY = "mini-factory-save";
+const MAX_SAVE_LEVEL_ID = Math.max(...Object.keys(LEVELS).map(Number));
 
 const isRecord = (value) =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -36,7 +39,11 @@ function isValidSaveState(value) {
   if (!isRecord(value)) return false;
   if (value.version !== SAVE_VERSION) return false;
   if (!Number.isInteger(value.unlockedLevel) || value.unlockedLevel < 1) return false;
-  if (value.unlockedLevel > 5 || !isRecord(value.bestResults) || !isRecord(value.drafts)) return false;
+  if (
+    value.unlockedLevel > MAX_SAVE_LEVEL_ID ||
+    !isRecord(value.bestResults) ||
+    !isRecord(value.drafts)
+  ) return false;
   return (
     Object.values(value.bestResults).every(isValidResult) &&
     Object.values(value.drafts).every(isValidDraft)
@@ -47,7 +54,7 @@ function normalizedActiveLevelId(activeLevelId, unlockedLevel) {
   return Number.isInteger(activeLevelId) &&
     activeLevelId >= 1 &&
     activeLevelId <= unlockedLevel &&
-    activeLevelId <= 5
+    activeLevelId <= MAX_SAVE_LEVEL_ID
     ? activeLevelId
     : 1;
 }

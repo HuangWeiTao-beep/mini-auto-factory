@@ -462,6 +462,9 @@ export function createProductionState(design) {
 }
 
 export function startProduction(state, options = {}) {
+  if (isOrderSchedulingLevel(options.level)) {
+    return createProductionState(options.design ?? { devices: {}, connections: [] });
+  }
   if (options.edited) {
     return {
       ...createProductionState(
@@ -651,6 +654,7 @@ export function advanceProduction(state, design, level, deltaSeconds) {
     deltaSeconds = level;
     level = LEVEL_CONFIG;
   }
+  if (isOrderSchedulingLevel(level)) return state;
   if (state.mode !== "running" || deltaSeconds <= 0) return state;
   const next = clone(state);
   let remaining = Math.min(deltaSeconds, level.duration - next.elapsed);

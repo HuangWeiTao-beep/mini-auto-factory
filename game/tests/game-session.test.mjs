@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SAVE_VERSION, loadGameSave, saveGameSave } from "../app/game/game-save.mjs";
+import {
+  SAVE_VERSION,
+  loadGameSave,
+  saveGameSave,
+  serializeGameSave,
+} from "../app/game/game-save.mjs";
 import { LEVELS, createProductionState } from "../app/game/factory-model.mjs";
 import { createOrderScenario } from "../app/game/order-scheduling.mjs";
 import {
@@ -348,6 +353,45 @@ test("switching levels immediately after a retry keeps the new seed", () => {
   assert.deepEqual(backOnLevelSix.scenario, createOrderScenario(6, retrySeed));
 });
 
+test("switching levels keeps in-memory drafts and seeds when storage cannot write", () => {
+  const raw = serializeGameSave({
+    version: SAVE_VERSION,
+    unlockedLevel: 7,
+    activeLevelId: 6,
+    bestResults: {},
+    drafts: { 6: draft },
+    chapterTwoSeeds: { 6: 1606, 7: 1707 },
+  });
+  const storageVariants = [
+    {
+      getItem() { return raw; },
+      setItem() { throw new Error("read only"); },
+    },
+    {
+      getItem() { return raw; },
+    },
+  ];
+  const revisedDraft = {
+    devices: {
+      source: { ...draft.devices.source, x: 72, gridX: 2 },
+    },
+    connections: [],
+  };
+
+  for (const storage of storageVariants) {
+    const retried = resetGameSession(restoreGameSession(storage), true);
+    const revised = updateGameDesign(retried, revisedDraft);
+    const retrySeed = revised.chapterTwoSeeds[6];
+
+    const onLevelSeven = selectGameLevel(storage, revised, 7).session;
+    const backOnLevelSix = selectGameLevel(storage, onLevelSeven, 6).session;
+
+    assert.equal(backOnLevelSix.chapterTwoSeeds[6], retrySeed);
+    assert.deepEqual(backOnLevelSix.scenario, createOrderScenario(6, retrySeed));
+    assert.deepEqual(backOnLevelSix.design, revisedDraft);
+  }
+});
+
 test("session order actions update only valid running queues", () => {
   const scenario = createOrderScenario(6, 1606);
   const baseState = createProductionState(draft, LEVELS[6], scenario);
@@ -385,6 +429,12 @@ test("session order actions update only valid running queues", () => {
     state: { ...waitingState, mode: "paused" },
   };
   assert.strictEqual(enqueueSessionOrder(paused, firstId), paused);
+  for (const invalidIndex of [Number.NaN, Infinity, -Infinity, 0.5]) {
+    assert.strictEqual(
+      moveSessionQueuedOrder(secondQueued, secondId, invalidIndex),
+      secondQueued,
+    );
+  }
 });
 
 test("switching to an unlocked level restores its draft as a fresh design session", () => {
@@ -500,6 +550,7 @@ test("a running session persists only its stable progress fields", () => {
     unlockedLevel: 2,
     bestResults: { 1: { elapsed: 41.5, completed: 10 } },
     chapterTwoSeeds: {},
+    drafts: {},
     design: draft,
     state: { mode: "running" },
   });

@@ -61,3 +61,37 @@
 ## Concerns
 
 - `npx tsc --noEmit` still exits 1 on seven pre-existing `MachineCard.tsx` issues introduced by chapter-two model types (optional machine durations, missing coater icon coverage, and order-material rendering). Task 3's save/session declaration errors are resolved; fixing the remaining UI errors would cross into Task 4+.
+
+## Fix round 1
+
+### Findings addressed
+
+- Made the current in-memory stable session authoritative during level changes. `restoreGameSession(...)` now carries the complete stable draft map, and `saveGameSession(...)` returns a canonical snapshot that `selectGameLevel(...)` merges over any stale restore result before rebuilding the target scenario and pristine production state.
+- Preserved a just-retried chapter-two seed and revised layout across level switches even when `setItem` throws or is absent. Storage still supplies target-level data that is not present in memory, but cannot roll back in-memory drafts, seeds, unlocks, or best results.
+- Propagated the stable draft map through `toPersistedGameSession(...)` and `useGameSession()`, while keeping runtime orders, queues, timers, materials, machines, and lines outside the save boundary.
+- Aligned `.d.mts` storage contracts with runtime behavior: read access is required, while `setItem` and `removeItem` are explicitly optional at the tolerant persistence boundary. `saveGameSession(...)` now declares its real `GameSaveState` return and accepts the runtime-supported persistable session shape.
+- Rejected non-finite and non-integer `nextIndex` values in both `moveProductionOrder(...)` and `moveSessionQueuedOrder(...)`. Invalid moves return the exact original state/session object before reaching queue mutation.
+
+### TDD evidence
+
+- RED: throwing and read-only storage both rolled the retry seed from the new in-memory value back to `1606`; the revised draft was also lost after switching away and back.
+- GREEN: both storage variants preserve the new seed, deterministic scenario, and revised draft across the same two-level switch sequence.
+- RED: `NaN`, `-Infinity`, and `0.5` moved the second queued order to index 0 at the production/session boundary.
+- GREEN: `NaN`, `Infinity`, `-Infinity`, and `0.5` all preserve referential identity at both boundaries.
+- Required acceptance: `cd game && node --test tests/game-save.test.mjs tests/game-session.test.mjs` — 31 passed, 0 failed.
+- Focused model/session/save coverage: `cd game && node --test tests/game-save.test.mjs tests/game-session.test.mjs tests/chapter-two-production.test.mjs` — 46 passed, 0 failed.
+- Full Node regression: `cd game && node --test tests/*.test.mjs` — 107 passed, 0 failed.
+- Build: `cd game && npm run build` — exit 0.
+- Lint: `cd game && npm run lint` — exit 0, no lint errors.
+- Type declaration check: `cd game && npx tsc --noEmit` reports only the same seven unchanged `MachineCard.tsx` Task 4 errors; no changed Task 3 declaration or Hook errors remain.
+- `git diff --check` reported no whitespace errors; only the repository's LF-to-CRLF checkout notices appeared.
+
+### Commit
+
+- Pre-fix HEAD: `eda8fc901c7f01f6d4c10f2b10154a56b8188a1f`
+- Planned fix commit message: `fix: preserve chapter two session state`
+- The fix commit hash is supplied in the final handoff because a commit cannot contain its own hash.
+
+### Remaining concerns
+
+- The seven pre-existing `MachineCard.tsx` type errors remain intentionally deferred to Task 4; this fix round does not modify chapter-two UI.

@@ -64,6 +64,7 @@ export function restoreGameSession(storage, selectedLevelId) {
     activeLevelId,
     unlockedLevel: save.unlockedLevel,
     bestResults: save.bestResults,
+    drafts: save.drafts,
     chapterTwoSeeds,
     scenario,
     design,
@@ -100,14 +101,27 @@ export function selectGameLevel(storage, session, levelId) {
   if (!LEVELS[levelId] || levelId > session.unlockedLevel) {
     return { accepted: false, session };
   }
-  saveGameSession(storage, session);
+  const persisted = saveGameSession(storage, session);
   const restored = restoreGameSession(storage, levelId);
+  const drafts = { ...restored.drafts, ...persisted.drafts };
+  const chapterTwoSeeds = {
+    ...restored.chapterTwoSeeds,
+    ...persisted.chapterTwoSeeds,
+  };
+  const level = LEVELS[levelId];
+  const design = drafts[levelId] ?? createEmptyDesign();
+  const scenario = createSessionScenario(level, chapterTwoSeeds[levelId]);
   return {
     accepted: true,
     session: {
       ...restored,
-      unlockedLevel: session.unlockedLevel,
-      bestResults: session.bestResults,
+      unlockedLevel: persisted.unlockedLevel,
+      bestResults: persisted.bestResults,
+      drafts,
+      chapterTwoSeeds,
+      scenario,
+      design,
+      state: createProductionState(design, level, scenario),
       editedWhilePaused: false,
       recordBroken: false,
     },
@@ -183,6 +197,7 @@ export function enqueueSessionOrder(session, orderId) {
 }
 
 export function moveSessionQueuedOrder(session, orderId, nextIndex) {
+  if (!Number.isFinite(nextIndex) || !Number.isInteger(nextIndex)) return session;
   if (session.state.mode !== "running") return session;
   const state = moveProductionOrder(session.state, orderId, nextIndex);
   return state === session.state ? session : { ...session, state };
@@ -193,6 +208,7 @@ export function toPersistedGameSession(session) {
     activeLevelId: session.activeLevelId,
     unlockedLevel: session.unlockedLevel,
     bestResults: session.bestResults,
+    drafts: session.drafts ?? {},
     chapterTwoSeeds: session.chapterTwoSeeds ?? {},
     design: session.design,
     state: { mode: session.state.mode },
@@ -201,9 +217,10 @@ export function toPersistedGameSession(session) {
 
 export function saveGameSession(storage, session) {
   const previous = loadGameSave(storage);
+  const stableDrafts = { ...previous.drafts, ...(session.drafts ?? {}) };
   const drafts = session.state.mode === "running"
-    ? previous.drafts
-    : { ...previous.drafts, [session.activeLevelId]: session.design };
+    ? stableDrafts
+    : { ...stableDrafts, [session.activeLevelId]: session.design };
   return saveGameSave(storage, {
     version: previous.version,
     unlockedLevel: session.unlockedLevel,

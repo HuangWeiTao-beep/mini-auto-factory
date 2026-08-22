@@ -17,15 +17,19 @@ export interface GameSaveState {
   chapterTwoSeeds: Record<number, number>;
 }
 
+type GameSaveReader = Pick<Storage, "getItem">;
+type GameSaveWriter = GameSaveReader & Partial<Pick<Storage, "setItem">>;
+type GameSaveStore = GameSaveWriter & Partial<Pick<Storage, "removeItem">>;
+
 export const SAVE_VERSION: 2;
 export const SAVE_STORAGE_KEY: string;
 export const DEFAULT_SAVE_STATE: Readonly<GameSaveState>;
 export function createDefaultSaveState(): GameSaveState;
 export function parseGameSave(raw: string | null): GameSaveState;
 export function serializeGameSave(state: GameSaveState): string;
-export function loadGameSave(storage?: Storage, key?: string): GameSaveState;
-export function saveGameSave(storage: Storage | undefined, state: GameSaveState, key?: string): GameSaveState;
-export function clearGameSave(storage?: Storage, key?: string): GameSaveState;
+export function loadGameSave(storage?: GameSaveReader, key?: string): GameSaveState;
+export function saveGameSave(storage: GameSaveWriter | undefined, state: GameSaveState, key?: string): GameSaveState;
+export function clearGameSave(storage?: GameSaveStore, key?: string): GameSaveState;
 export const loadSave: typeof loadGameSave;
 export const saveSave: typeof saveGameSave;
 export const clearSave: typeof clearGameSave;

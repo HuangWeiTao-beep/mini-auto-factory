@@ -258,6 +258,19 @@ test("queue APIs reject every transition except waiting to queued and queued reo
   assert.equal(moveProductionOrder(state, "queued", 0), state);
 });
 
+test("production queue movement rejects non-finite and fractional indexes", () => {
+  const scenario = createScenario(6, [
+    { id: "order-a", productId: "standard", status: "queued" },
+    { id: "order-b", productId: "precision", status: "queued" },
+  ]);
+  scenario.queue = ["order-a", "order-b"];
+  const state = createProductionState(createEmptyDesign(), LEVELS[6], scenario);
+
+  for (const invalidIndex of [Number.NaN, Infinity, -Infinity, 0.5]) {
+    assert.strictEqual(moveProductionOrder(state, "order-b", invalidIndex), state);
+  }
+});
+
 for (const [productId, levelId, finalMachine] of [
   ["standard", 6, "lathe"],
   ["precision", 6, "drill"],

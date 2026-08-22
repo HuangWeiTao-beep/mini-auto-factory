@@ -501,6 +501,7 @@ export function enqueueProductionOrder(state, orderId) {
 }
 
 export function moveProductionOrder(state, orderId, nextIndex) {
+  if (!Number.isFinite(nextIndex) || !Number.isInteger(nextIndex)) return state;
   if (!state.orders || !state.queue) return state;
   const order = state.orders.find((candidate) => candidate.id === orderId);
   if (order?.status !== "queued") return state;

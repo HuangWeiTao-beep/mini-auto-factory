@@ -41,6 +41,7 @@ export function useGameSession(options: {
     activeLevelId: persistedActiveLevelId,
     unlockedLevel: persistedUnlockedLevel,
     bestResults: persistedBestResults,
+    drafts: persistedDrafts,
     chapterTwoSeeds: persistedChapterTwoSeeds,
     design: persistedDesign,
   } = session;
@@ -74,6 +75,7 @@ export function useGameSession(options: {
       activeLevelId: persistedActiveLevelId,
       unlockedLevel: persistedUnlockedLevel,
       bestResults: persistedBestResults,
+      drafts: persistedDrafts,
       chapterTwoSeeds: persistedChapterTwoSeeds,
       design: persistedDesign,
       state: { mode: persistedStateMode },
@@ -82,6 +84,7 @@ export function useGameSession(options: {
       persistedActiveLevelId,
       persistedUnlockedLevel,
       persistedBestResults,
+      persistedDrafts,
       persistedChapterTwoSeeds,
       persistedDesign,
       persistedStateMode,

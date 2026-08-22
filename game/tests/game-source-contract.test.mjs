@@ -154,7 +154,10 @@ test("failure settlement consumes the direct diagnostic policy before the route 
     "utf8",
   );
 
-  assert.match(game, /getFailureDiagnostic\(\s*state\.warning,\s*contextualFeedback\?\.message,\s*level\.routeHint,?\s*\)/);
+  assert.match(
+    game,
+    /getFailureDiagnostic\(\s*state\.warning,\s*contextualFeedback\?\.message,\s*level\.routeHint,\s*state\.failure,?\s*\)/,
+  );
 });
 
 test("successful paused design edits flow into the restart-production action label", async () => {

@@ -9,6 +9,7 @@ import {
   canPlaceDevice,
   connectDevices,
   getDeviceLimit,
+  isOrderSchedulingLevel,
   moveDevice,
   outgoing,
   removeConnection,
@@ -44,6 +45,7 @@ export function MiniFactoryGame() {
   const [toast, setToast] = useState("把设备拖进画布，按关卡工序连接起来。");
   const floorRef = useRef<HTMLDivElement>(null);
   const shownChapterTwoOnboarding = useRef(false);
+  const shownChapterThreeOnboarding = useRef(false);
   const handleSessionRestore = useCallback((restored: { activeLevelId: number }) => {
     const showChapterTwoGuide = restored.activeLevelId === 6 && !shownChapterTwoOnboarding.current;
     if (showChapterTwoGuide) shownChapterTwoOnboarding.current = true;
@@ -84,7 +86,7 @@ export function MiniFactoryGame() {
     .filter((item) => getDeviceLimit(level, item.type) > 0)
     .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
   const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
-  const orderScheduling = Boolean(level.orderConfig);
+  const orderScheduling = isOrderSchedulingLevel(level);
   const maintenanceLevel = Boolean(level.maintenance);
   const maintenanceCacheState = Object.entries(state.machines)
     .sort(([leftId], [rightId]) => leftId < rightId ? -1 : leftId > rightId ? 1 : 0)
@@ -315,8 +317,10 @@ export function MiniFactoryGame() {
     setConnectingFrom(null);
     setShowLevelSelect(false);
     const showChapterTwoGuide = levelId === 6 && !shownChapterTwoOnboarding.current;
+    const showChapterThreeGuide = levelId === 11 && !shownChapterThreeOnboarding.current;
     if (showChapterTwoGuide) shownChapterTwoOnboarding.current = true;
-    setShowOnboarding(levelId === 1 || showChapterTwoGuide);
+    if (showChapterThreeGuide) shownChapterThreeOnboarding.current = true;
+    setShowOnboarding(levelId === 1 || showChapterTwoGuide || showChapterThreeGuide);
     setToast(`第 ${levelId} 关已载入。先摆设备，再连产线。`);
   };
 
@@ -339,8 +343,8 @@ export function MiniFactoryGame() {
           <button className="chapter-control" type="button" aria-label="打开关卡选择" onClick={openLevelSelect} disabled={locked}>
             <span aria-hidden="true">⌘</span>关卡
           </button>
-          {(activeLevelId === 1 || activeLevelId === 6) && (
-            <button className="help-control" type="button" aria-label={activeLevelId === 6 ? "打开订单调度说明" : "打开玩法说明"} onClick={openOnboarding}>
+          {(activeLevelId === 1 || activeLevelId === 6 || activeLevelId === 11) && (
+            <button className="help-control" type="button" aria-label={activeLevelId === 11 ? "打开设备可靠性说明" : activeLevelId === 6 ? "打开订单调度说明" : "打开玩法说明"} onClick={openOnboarding}>
               <span aria-hidden="true">?</span>玩法
             </button>
           )}
@@ -488,7 +492,19 @@ export function MiniFactoryGame() {
           <section className="onboarding-card">
             <button className="onboarding-close" type="button" aria-label="关闭玩法说明" onClick={closeOnboarding} autoFocus>×</button>
             <span className="onboarding-kicker">START HERE</span>
-            {activeLevelId === 6 ? (
+            {activeLevelId === 11 ? (
+              <>
+                <h2 id="onboarding-title">第 11 关怎么玩</h2>
+                <p>第三章开始管设备可靠性。产量很重要，但把机器榨到故障不叫管理，叫许愿。</p>
+                <ol className="onboarding-steps onboarding-steps--reliability">
+                  <li>加工设备每完成一次加工周期才增加磨损；运输、等待和空闲都不会磨损。</li>
+                  <li><strong>60% 进入预警</strong>，速度不变；<strong>85% 进入高危，单次加工慢 20%</strong>；<strong>100% 故障</strong>，之后拒绝新物料。</li>
+                  <li>提前安排维护时，机器会完成当前物料再停止接料；计划维护完成后磨损归零。</li>
+                  <li>全厂只有一支维修队。多台设备排队时，把最影响交付的机器提到前面。</li>
+                </ol>
+                <button className="onboarding-primary" type="button" onClick={closeOnboarding}>我明白了，开始维护</button>
+              </>
+            ) : activeLevelId === 6 ? (
               <>
                 <h2 id="onboarding-title">第 6 关怎么玩</h2>
                 <p>订单调度上线。机器照旧，麻烦开始带编号和截止时间了。</p>

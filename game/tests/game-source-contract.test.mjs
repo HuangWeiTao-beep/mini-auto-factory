@@ -245,7 +245,8 @@ test("chapter two uses scenario palette order and chapter-aware level copy", asy
   ]);
 
   assert.match(game, /scenario\?\.paletteTypes \?\? level\.paletteTypes/);
-  assert.match(game, /CHAPTER \$\{level\.chapter === 1 \? "ONE" : "TWO"\}/);
+  assert.match(game, /CHAPTER THREE/);
+  assert.match(game, /level\.chapter === 1 \? "ONE" : "TWO"/);
   assert.match(game, /getSuccessSettlement\(level, maxLevelId\)/);
   assert.match(machine, /coater:\s*"◌"/);
   assert.match(machine, /镀层成为防锈螺栓/);
@@ -267,4 +268,38 @@ test("level six includes one-time order scheduling guidance", async () => {
   assert.match(game, /投料后锁定/);
   assert.match(game, /截止时间/);
   assert.match(game, /shownChapterTwoOnboarding/);
+});
+
+test("chapter three has its own map range and order-aware mission copy", async () => {
+  const [game, levelSelect] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(levelSelect, /第三章：设备可靠性/);
+  assert.match(levelSelect, /levelId >= 11 && levelId <= 15/);
+  assert.match(levelSelect, /levelId >= 6 && levelId <= 10/);
+  assert.match(levelSelect, /if \(level\.orderConfig\)/);
+  assert.match(game, /isOrderSchedulingLevel\(level\)/);
+  assert.doesNotMatch(game, /level\.chapter === 2/);
+  assert.match(game, /CHAPTER THREE/);
+});
+
+test("level eleven offers one-time reliability guidance with the full maintenance rules", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /activeLevelId === 1 \|\| activeLevelId === 6 \|\| activeLevelId === 11/);
+  assert.match(game, /shownChapterThreeOnboarding/);
+  assert.match(game, /levelId === 11 && !shownChapterThreeOnboarding\.current/);
+  assert.doesNotMatch(game, /restored\.activeLevelId === 11/);
+  assert.match(game, /第 11 关怎么玩/);
+  assert.match(game, /每完成一次加工周期/);
+  assert.match(game, /60%.*预警/);
+  assert.match(game, /85%.*高危.*20%/);
+  assert.match(game, /100%.*故障/);
+  assert.match(game, /完成当前物料.*停止接料/);
+  assert.match(game, /全厂只有一支维修队/);
 });

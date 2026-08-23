@@ -1003,8 +1003,11 @@ function trySend(state, design, level, deviceId, material, clearOutput) {
   return true;
 }
 
-function outputFor(level, type) {
-  return type === "lathe" && level.id >= 2
+function outputFor(level, design, type) {
+  const requiresDrilling =
+    (level.deviceLimits.drill ?? 0) > 0 ||
+    Object.values(design.devices).some((device) => device.type === "drill");
+  return type === "lathe" && requiresDrilling
     ? "undrilledBolt"
     : DEVICE_TYPES[type].produces;
 }
@@ -1288,7 +1291,7 @@ function tick(state, design, level, delta) {
     if (machine.active) {
       machine.remaining = Math.max(0, machine.remaining - delta);
       if (machine.remaining <= 1e-9) {
-        machine.output = outputFor(level, design.devices[id].type);
+        machine.output = outputFor(level, design, design.devices[id].type);
         machine.active = null;
         machine.remaining = 0;
         machine.status = "ready";

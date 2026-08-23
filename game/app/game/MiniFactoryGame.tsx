@@ -17,6 +17,7 @@ import type { DeviceType } from "./factory-model.mjs";
 import { MACHINE, snapToGrid } from "./factory-grid.mjs";
 import { getFailureDiagnostic, getPlayerFeedback } from "./feedback-policy.mjs";
 import { getProductionActionLabel, getSuccessSettlement } from "./production-controls.mjs";
+import { getOperationsFeedback } from "./operations-feedback.mjs";
 import { getSchedulingFeedback } from "./scheduling-feedback.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
@@ -71,6 +72,7 @@ export function MiniFactoryGame() {
     cancelMaintenance,
     moveMaintenanceUp,
     moveMaintenanceDown,
+    prioritizeMaintenance,
     selectLevel: selectSessionLevel,
     clearProgress,
   } = useGameSession({ onRestored: handleSessionRestore });
@@ -84,9 +86,19 @@ export function MiniFactoryGame() {
   const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
   const orderScheduling = Boolean(level.orderConfig);
   const maintenanceLevel = Boolean(level.maintenance);
-  const feedbackCacheKey = `${Math.floor(state.elapsed * 2)}:${(state.orders ?? []).map((order) => `${order.id}:${order.status}`).join("|")}:${(state.queue ?? []).join("|")}`;
-  const schedulingFeedback = orderScheduling
-    ? getSchedulingFeedback({
+  const maintenanceCacheState = Object.entries(state.machines)
+    .sort(([leftId], [rightId]) => leftId < rightId ? -1 : leftId > rightId ? 1 : 0)
+    .map(([machineId, machine]) => `${machineId}:${machine.reliability?.wear ?? 0}:${machine.reliability?.status ?? "available"}`)
+    .join("|");
+  const maintenanceQueueCacheState = [
+    state.maintenance?.activeJob
+      ? `${state.maintenance.activeJob.machineId}:${state.maintenance.activeJob.kind}`
+      : "idle",
+    ...(state.maintenance?.queue ?? []).map((job) => `${job.machineId}:${job.kind}`),
+  ].join("|");
+  const feedbackCacheKey = `${Math.floor(state.elapsed * 2)}:${(state.orders ?? []).map((order) => `${order.id}:${order.status}`).join("|")}:${(state.queue ?? []).join("|")}:${maintenanceCacheState}:${maintenanceQueueCacheState}`;
+  const operationsFeedback = maintenanceLevel
+    ? getOperationsFeedback({
         design,
         level,
         state,
@@ -95,6 +107,17 @@ export function MiniFactoryGame() {
         elapsed: state.elapsed,
         cacheKey: feedbackCacheKey,
       })
+    : null;
+  const schedulingFeedback = orderScheduling
+    ? operationsFeedback?.scheduling ?? getSchedulingFeedback({
+      design,
+      level,
+      state,
+      orders: state.orders ?? [],
+      queue: state.queue ?? [],
+      elapsed: state.elapsed,
+      cacheKey: feedbackCacheKey,
+    })
     : null;
   const locked = state.mode === "running";
   const remaining = Math.max(0, level.duration - state.elapsed);
@@ -405,6 +428,13 @@ export function MiniFactoryGame() {
             onCancel={cancelMaintenance}
             onMoveUp={moveMaintenanceUp}
             onMoveDown={moveMaintenanceDown}
+            feedback={operationsFeedback}
+            orderActionsEnabled={state.mode === "running"}
+            maintenanceActionsEnabled={state.mode === "running" || state.mode === "paused"}
+            onEnqueueOrder={enqueueOrder}
+            onPrioritizeOrder={prioritizeOrder}
+            onScheduleMaintenance={requestMaintenance}
+            onPrioritizeMaintenance={prioritizeMaintenance}
           >
             {orderScheduling && (
               <OrderPanel

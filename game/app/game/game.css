@@ -111,7 +111,9 @@ button { font: inherit; }
 .order-panel { min-height: 0; max-height: calc(100vh - 224px); padding: 16px 14px 22px; overflow-y: auto; border-left: 1px solid var(--line); background: #e3ddcf; }
 .operations-panel { min-height: 0; max-height: calc(100vh - 224px); overflow-y: auto; border-left: 1px solid var(--line); background: #e3ddcf; }
 .operations-panel > .order-panel { max-height: none; padding-top: 10px; overflow: visible; border-left: 0; background: transparent; }
+.operations-panel > .order-panel .scheduling-radar { display: none; }
 .maintenance-panel { padding: 16px 14px 8px; }
+.operations-radar { margin: 6px 14px 8px; }
 .maintenance-panel__heading small { max-width: 155px; text-align: right; }
 .maintenance-goal { margin-top: 10px; padding: 11px; border: 1px solid rgba(198,101,37,.55); border-left: 4px solid var(--orange); background: #fff2df; }
 .maintenance-goal strong { font-size: 12px; }

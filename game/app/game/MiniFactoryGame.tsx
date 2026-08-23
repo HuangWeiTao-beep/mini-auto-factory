@@ -20,6 +20,7 @@ import { getProductionActionLabel, getSuccessSettlement } from "./production-con
 import { getSchedulingFeedback } from "./scheduling-feedback.mjs";
 import { FactoryFloor } from "./FactoryFloor";
 import { LevelSelectModal } from "./LevelSelectModal";
+import { OperationsPanel } from "./OperationsPanel";
 import { OrderPanel } from "./OrderPanel";
 import { useGameSession } from "./useGameSession";
 import "./game.css";
@@ -30,7 +31,8 @@ const paletteDefinitions: Array<{ type: DeviceType; icon: string; eyebrow: strin
   { type: "lathe", icon: "⚙", eyebrow: "TURN 03 · 车削机" },
   { type: "drill", icon: "◉", eyebrow: "DRILL 04 · 钻孔机" },
   { type: "coater", icon: "◌", eyebrow: "COAT 05 · 镀层机" },
-  { type: "exit", icon: "✓", eyebrow: "QC 05 · 成品出口" },
+  { type: "heatTreater", icon: "♨", eyebrow: "HEAT 06 · 热处理炉" },
+  { type: "exit", icon: "✓", eyebrow: "QC 07 · 成品出口" },
 ];
 
 export function MiniFactoryGame() {
@@ -54,6 +56,7 @@ export function MiniFactoryGame() {
     scenario,
     design,
     state,
+    maintenanceAlert,
     editedWhilePaused,
     level,
     mutateDesign,
@@ -64,6 +67,10 @@ export function MiniFactoryGame() {
     moveOrderUp,
     moveOrderDown,
     prioritizeOrder,
+    requestMaintenance,
+    cancelMaintenance,
+    moveMaintenanceUp,
+    moveMaintenanceDown,
     selectLevel: selectSessionLevel,
     clearProgress,
   } = useGameSession({ onRestored: handleSessionRestore });
@@ -75,9 +82,10 @@ export function MiniFactoryGame() {
     .filter((item) => getDeviceLimit(level, item.type) > 0)
     .map((item) => ({ ...item, limit: getDeviceLimit(level, item.type) }));
   const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
-  const chapterTwo = level.chapter === 2;
+  const orderScheduling = Boolean(level.orderConfig);
+  const maintenanceLevel = Boolean(level.maintenance);
   const feedbackCacheKey = `${Math.floor(state.elapsed * 2)}:${(state.orders ?? []).map((order) => `${order.id}:${order.status}`).join("|")}:${(state.queue ?? []).join("|")}`;
-  const schedulingFeedback = chapterTwo
+  const schedulingFeedback = orderScheduling
     ? getSchedulingFeedback({
         design,
         level,
@@ -132,13 +140,18 @@ export function MiniFactoryGame() {
             }
           : null;
   const visibleFeedback = state.mode === "running" ? contextualFeedback : null;
-  const visibleWarning = visibleFeedback?.tone === "warning";
-  const visibleWait = visibleFeedback?.tone === "wait";
-  const playerFeedback = getPlayerFeedback(
-    state.mode,
-    contextualFeedback?.message ?? state.warning,
-    toast,
+  const maintenanceAlertVisible = Boolean(
+    maintenanceAlert && state.elapsed - maintenanceAlert.at < 4,
   );
+  const visibleWarning = maintenanceAlertVisible || visibleFeedback?.tone === "warning";
+  const visibleWait = visibleFeedback?.tone === "wait";
+  const playerFeedback = maintenanceAlertVisible
+    ? maintenanceAlert!.message
+    : getPlayerFeedback(
+        state.mode,
+        contextualFeedback?.message ?? state.warning,
+        toast,
+      );
   const failureDiagnostic = getFailureDiagnostic(
     state.warning,
     contextualFeedback?.message,
@@ -265,8 +278,9 @@ export function MiniFactoryGame() {
     const duration = type === "exit" ? 0 : level.machineDurations[type] ?? DEVICE_TYPES[type].duration;
     if (type === "cutter") return `${duration} 秒 · 钢棒变短料`;
     if (type === "lathe") return `${duration} 秒 · 短料变${level.chapter === 1 && level.id > 1 ? "未钻孔螺栓" : "螺栓"}`;
-    if (type === "drill") return `${duration} 秒 · 钻孔成为${chapterTwo ? "精密螺栓" : "合格螺栓"}`;
+    if (type === "drill") return `${duration} 秒 · 钻孔成为${orderScheduling ? "精密螺栓" : "合格螺栓"}`;
     if (type === "coater") return `${duration} 秒 · 镀层成为防锈螺栓`;
+    if (type === "heatTreater") return `${duration} 秒 · 热处理成为强化螺栓`;
     return "即时接收合格螺栓";
   };
 
@@ -288,7 +302,9 @@ export function MiniFactoryGame() {
       <header className="app-header" inert={overlayOpen ? true : undefined}>
         <div className="brand-lockup">
           <span className="brand-mark">M<span>F</span></span>
-          <div><b>迷你自动化工厂</b><small>{`MINI AUTOMATION FACTORY · CHAPTER ${level.chapter === 1 ? "ONE" : "TWO"}`}</small></div>
+          <div><b>迷你自动化工厂</b><small>{level.chapter === 3
+            ? "MINI AUTOMATION FACTORY · CHAPTER THREE"
+            : `MINI AUTOMATION FACTORY · CHAPTER ${level.chapter === 1 ? "ONE" : "TWO"}`}</small></div>
         </div>
         <div className="level-title">
           <span>章节关卡 {String(activeLevelId).padStart(2, "0")}</span>
@@ -312,14 +328,14 @@ export function MiniFactoryGame() {
       </header>
 
       <section className="mission-strip" aria-label="关卡目标" inert={overlayOpen ? true : undefined}>
-        {chapterTwo ? (
+        {orderScheduling ? (
           <div><span className="mission-tag">ORDERS</span><p>在各自截止时间前完成 <b>{level.target}</b> 张订单</p></div>
         ) : (
           <div><span className="mission-tag">MISSION</span><p>{`${level.duration} 秒内生产 `}<b>{level.target}</b> 个合格螺栓</p></div>
         )}
         <div className="route-hint"><span>{level.routeHint}</span></div>
         <div className="mission-metrics">
-          {chapterTwo ? (
+          {orderScheduling ? (
             <>
               <div><small>待排 / 排队</small><strong>{state.orders?.filter((order) => order.status === "waiting").length ?? 0}<em>/{state.queue?.length ?? 0}</em></strong></div>
               <div><small>订单完成</small><strong>{state.completed}<em>/{level.target}</em></strong></div>
@@ -333,7 +349,7 @@ export function MiniFactoryGame() {
         </div>
       </section>
 
-      <div className={`workspace ${chapterTwo ? "workspace--orders" : ""}`} inert={overlayOpen ? true : undefined}>
+      <div className={`workspace ${maintenanceLevel ? "workspace--operations" : orderScheduling ? "workspace--orders" : ""}`} inert={overlayOpen ? true : undefined}>
         <aside className="equipment-panel">
           <div className="panel-heading"><span>设备库</span><small>拖入画布</small></div>
           <div className="equipment-list">
@@ -370,6 +386,9 @@ export function MiniFactoryGame() {
             onStartConnection={setConnectingFrom}
             onConnect={finishConnection}
             onRemoveConnection={(id) => mutateDesign((current) => removeConnection(current, id))}
+            maintenanceActionsEnabled={state.mode === "running" || state.mode === "paused"}
+            onRequestMaintenance={requestMaintenance}
+            onCancelMaintenance={cancelMaintenance}
           />
           <div className={`feedback-bar ${visibleWarning ? "feedback-bar--warning" : visibleWait ? "feedback-bar--wait" : ""}`} role="status" aria-live="polite">
             <span>{visibleWarning ? "!" : visibleWait ? "Ⅱ" : state.mode === "running" ? "▶" : "i"}</span>
@@ -377,7 +396,32 @@ export function MiniFactoryGame() {
             <small>{visibleWait ? "线路等待" : locked ? "布局锁定" : allMachinesPlaced ? "设备齐全" : `还需放置 ${remainingDevices} 台设备`}</small>
           </div>
         </section>
-        {chapterTwo && (
+        {maintenanceLevel ? (
+          <OperationsPanel
+            design={design}
+            state={state}
+            level={level}
+            actionsEnabled={state.mode === "running" || state.mode === "paused"}
+            onCancel={cancelMaintenance}
+            onMoveUp={moveMaintenanceUp}
+            onMoveDown={moveMaintenanceDown}
+          >
+            {orderScheduling && (
+              <OrderPanel
+                orders={state.orders ?? []}
+                queue={state.queue ?? []}
+                elapsed={state.elapsed}
+                failure={state.failure}
+                feedback={schedulingFeedback}
+                actionsEnabled={state.mode === "running"}
+                onEnqueue={enqueueOrder}
+                onMoveUp={moveOrderUp}
+                onMoveDown={moveOrderDown}
+                onPrioritize={prioritizeOrder}
+              />
+            )}
+          </OperationsPanel>
+        ) : orderScheduling ? (
           <OrderPanel
             orders={state.orders ?? []}
             queue={state.queue ?? []}
@@ -390,7 +434,7 @@ export function MiniFactoryGame() {
             onMoveDown={moveOrderDown}
             onPrioritize={prioritizeOrder}
           />
-        )}
+        ) : null}
       </div>
 
       <footer className="control-deck" inert={overlayOpen ? true : undefined}>
@@ -453,9 +497,9 @@ export function MiniFactoryGame() {
               ? successSettlement.message
               : failureDiagnostic}</p>
             <div className="settlement-stats">
-              <div><small>{chapterTwo ? "完成订单" : "合格螺栓"}</small><strong>{state.completed} / {level.target}</strong></div>
+              <div><small>{orderScheduling ? "完成订单" : "合格螺栓"}</small><strong>{state.completed} / {level.target}</strong></div>
               <div><small>完成时间</small><strong>{state.elapsed.toFixed(1)} 秒</strong></div>
-              <div><small>平均产量</small><strong>{averageOutput} {chapterTwo ? "单" : "件"}/分钟</strong></div>
+              <div><small>平均产量</small><strong>{averageOutput} {orderScheduling ? "单" : "件"}/分钟</strong></div>
             </div>
             {state.mode === "success" && recordBroken && (
               <p className="settlement-record-feedback" role="status" aria-live="polite">🏆 本次刷新纪录</p>

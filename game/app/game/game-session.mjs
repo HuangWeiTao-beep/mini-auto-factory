@@ -10,6 +10,11 @@ import {
   startProduction,
 } from "./factory-model.mjs";
 import { clearGameSave, loadGameSave, saveGameSave } from "./game-save.mjs";
+import {
+  cancelMaintenanceRequest,
+  moveMaintenanceRequest,
+  requestMaintenance,
+} from "./maintenance-model.mjs";
 import { markDesignEdited } from "./production-controls.mjs";
 
 let fallbackSeedCounter = 0;
@@ -222,6 +227,41 @@ export function prioritizeSessionOrder(session, orderId) {
   const enqueued = enqueueProductionOrder(session.state, orderId);
   const state = moveProductionOrder(enqueued, orderId, 0);
   return state === session.state ? session : { ...session, state };
+}
+
+function maintenanceActionsEnabled(session) {
+  return session.state.mode === "running" || session.state.mode === "paused";
+}
+
+function applyMaintenanceAction(session, action) {
+  if (!maintenanceActionsEnabled(session)) return session;
+  const state = action(session.state, LEVELS[session.activeLevelId]);
+  return state === session.state ? session : { ...session, state };
+}
+
+export function requestSessionMaintenance(session, machineId) {
+  return applyMaintenanceAction(session, (state, level) => requestMaintenance(state, machineId, level));
+}
+
+export function cancelSessionMaintenance(session, machineId) {
+  return applyMaintenanceAction(session, (state) => cancelMaintenanceRequest(state, machineId));
+}
+
+export function moveSessionMaintenance(session, machineId, nextIndex) {
+  if (!maintenanceActionsEnabled(session)) return session;
+  const queue = session.state.maintenance?.queue ?? [];
+  const currentIndex = queue.findIndex((job) => job.machineId === machineId);
+  if (currentIndex < 0) return session;
+  const targetIndex = Math.max(
+    0,
+    Math.min(Number.isFinite(nextIndex) ? Math.trunc(nextIndex) : 0, queue.length - 1),
+  );
+  if (targetIndex === currentIndex) return session;
+  return applyMaintenanceAction(session, (state) => moveMaintenanceRequest(state, machineId, nextIndex));
+}
+
+export function prioritizeSessionMaintenance(session, machineId) {
+  return moveSessionMaintenance(session, machineId, 0);
 }
 
 export function toPersistedGameSession(session) {

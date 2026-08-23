@@ -16,6 +16,9 @@ type Props = {
   onStartConnection: (id: string) => void;
   onConnect: (to: string) => void;
   onRemoveConnection: (id: string) => void;
+  maintenanceActionsEnabled: boolean;
+  onRequestMaintenance: (machineId: string) => boolean;
+  onCancelMaintenance: (machineId: string) => boolean;
 };
 
 function curve(fromX: number, fromY: number, toX: number, toY: number) {
@@ -54,6 +57,9 @@ export function FactoryFloor({
   onStartConnection,
   onConnect,
   onRemoveConnection,
+  maintenanceActionsEnabled,
+  onRequestMaintenance,
+  onCancelMaintenance,
 }: Props) {
   const deviceCapacity = Object.values(level.deviceLimits).reduce((sum, limit) => sum + limit, 0);
 
@@ -131,6 +137,9 @@ export function FactoryFloor({
           onStartConnection={onStartConnection}
           onFinishConnection={onConnect}
           onDragStart={onMoveStart}
+          maintenanceActionsEnabled={maintenanceActionsEnabled}
+          onRequestMaintenance={onRequestMaintenance}
+          onCancelMaintenance={onCancelMaintenance}
         />
       ))}
 

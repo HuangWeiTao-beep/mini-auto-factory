@@ -18,6 +18,7 @@ const productDetails: Record<ProductId, { label: string; route: string; icon: st
   standard: { label: "普通螺栓", route: "钢棒源 → 切割 → 车削 → 出口", icon: "◆" },
   precision: { label: "精密螺栓", route: "钢棒源 → 切割 → 车削 → 钻孔 → 出口", icon: "◎" },
   rustproof: { label: "防锈螺栓", route: "钢棒源 → 切割 → 车削 → 镀层 → 出口", icon: "◌" },
+  hardened: { label: "强化螺栓", route: "钢棒源 → 切割 → 车削 → 热处理 → 出口", icon: "♨" },
 };
 
 function remainingSeconds(order: ProductionOrder, elapsed: number) {
@@ -109,7 +110,7 @@ export function OrderPanel({
   const scheduledCount = scheduled.length;
 
   return (
-    <aside className="order-panel" aria-label="订单调度面板">
+    <section className="order-panel" aria-label="订单调度面板">
       <div className="panel-heading order-panel__heading">
         <span>订单看板</span><small>{scheduledCount > 0 ? `${scheduledCount} 单尚未到达` : "全部订单已到达"}</small>
       </div>
@@ -217,6 +218,6 @@ export function OrderPanel({
         <h2 id="order-completed-title">已完成 <span data-testid="order-completed-count">{completed.length}/{orders.length}</span></h2>
         <p>{completed.length === 0 ? "验收台还空着。" : completed.map((order) => order.id).join(" · ")}</p>
       </section>
-    </aside>
+    </section>
   );
 }

@@ -18,12 +18,16 @@ import {
   clearGameSession,
   enqueueSessionOrder,
   generateOrderScenarioSeed,
+  cancelSessionMaintenance,
+  moveSessionMaintenance,
   moveSessionQueuedOrder,
+  prioritizeSessionMaintenance,
   prioritizeSessionOrder,
   recordBestResult,
   resolveClearProgressDecision,
   restoreGameSession,
   resetGameSession,
+  requestSessionMaintenance,
   selectGameLevel,
   startGameSession,
   shouldShowOnboardingAfterRestore,
@@ -45,6 +49,69 @@ const draft = {
   devices: { source: { id: "source", type: "source", x: 36, y: 36, gridX: 1, gridY: 1 } },
   connections: [],
 };
+
+function chapterThreeSession(mode) {
+  const design = {
+    devices: {
+      source: { id: "source", type: "source", x: 36, y: 36, gridX: 1, gridY: 1 },
+      cutter: { id: "cutter", type: "cutter", x: 216, y: 36, gridX: 6, gridY: 1 },
+      lathe: { id: "lathe", type: "lathe", x: 396, y: 36, gridX: 11, gridY: 1 },
+      exit: { id: "exit", type: "exit", x: 576, y: 36, gridX: 16, gridY: 1 },
+    },
+    connections: [
+      { id: "source-cutter", from: "source", to: "cutter", branchIndex: 0 },
+      { id: "cutter-lathe", from: "cutter", to: "lathe", branchIndex: 0 },
+      { id: "lathe-exit", from: "lathe", to: "exit", branchIndex: 0 },
+    ],
+  };
+  return {
+    activeLevelId: 11,
+    unlockedLevel: 11,
+    bestResults: {},
+    drafts: { 11: design },
+    orderScenarioSeeds: {},
+    scenario: null,
+    design,
+    state: { ...createProductionState(design, LEVELS[11]), mode },
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+}
+
+test("maintenance actions are allowed only while running or paused", () => {
+  const runningSession = chapterThreeSession("running");
+  const pausedSession = chapterThreeSession("paused");
+  const designSession = chapterThreeSession("design");
+  const requested = requestSessionMaintenance(runningSession, "lathe");
+
+  assert.notStrictEqual(requested, runningSession);
+  assert.equal(requested.state.maintenance.queue[0].machineId, "lathe");
+  assert.equal(requestSessionMaintenance(pausedSession, "lathe").state.maintenance.queue[0].machineId, "lathe");
+  assert.strictEqual(requestSessionMaintenance(designSession, "lathe"), designSession);
+});
+
+test("maintenance session actions preserve identity for no-ops and reorder waiting jobs", () => {
+  const base = chapterThreeSession("running");
+  const cutterRequested = requestSessionMaintenance(base, "cutter");
+  const latheRequested = requestSessionMaintenance(cutterRequested, "lathe");
+  const prioritized = prioritizeSessionMaintenance(latheRequested, "lathe");
+
+  assert.deepEqual(prioritized.state.maintenance.queue.map((job) => job.machineId), ["lathe", "cutter"]);
+  assert.strictEqual(prioritizeSessionMaintenance(prioritized, "lathe"), prioritized);
+  assert.strictEqual(moveSessionMaintenance(prioritized, "missing", 1), prioritized);
+  assert.strictEqual(cancelSessionMaintenance(prioritized, "missing"), prioritized);
+
+  const moved = moveSessionMaintenance(prioritized, "lathe", 1);
+  assert.deepEqual(moved.state.maintenance.queue.map((job) => job.machineId), ["cutter", "lathe"]);
+  const cancelled = cancelSessionMaintenance(moved, "lathe");
+  assert.deepEqual(cancelled.state.maintenance.queue.map((job) => job.machineId), ["cutter"]);
+  assert.equal(cancelled.state.machines.lathe.reliability.status, "available");
+
+  const paused = { ...prioritized, state: { ...prioritized.state, mode: "paused" } };
+  assert.notStrictEqual(cancelSessionMaintenance(paused, "cutter"), paused);
+  const inactive = { ...prioritized, state: { ...prioritized.state, mode: "success" } };
+  assert.strictEqual(moveSessionMaintenance(inactive, "lathe", 1), inactive);
+});
 
 test("restoring a selected level recovers its unlocked progress, best result, and draft", () => {
   const storage = memoryStorage();

@@ -69,6 +69,10 @@ export function moveSessionQueuedOrder(
   nextIndex: number,
 ): GameSession;
 export function prioritizeSessionOrder(session: GameSession, orderId: string): GameSession;
+export function requestSessionMaintenance(session: GameSession, machineId: string): GameSession;
+export function cancelSessionMaintenance(session: GameSession, machineId: string): GameSession;
+export function moveSessionMaintenance(session: GameSession, machineId: string, nextIndex: number): GameSession;
+export function prioritizeSessionMaintenance(session: GameSession, machineId: string): GameSession;
 export function toPersistedGameSession(session: PersistableGameSession): PersistedGameSession;
 export function saveGameSession(storage: GameSaveStorage | undefined, session: PersistableGameSession): GameSaveState;
 export function clearGameSession(storage?: GameSaveStore): RestoredGameSession;

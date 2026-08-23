@@ -9,19 +9,19 @@ export interface FactoryDraft {
 }
 
 export interface GameSaveState {
-  version: 2;
+  version: 3;
   unlockedLevel: number;
   activeLevelId: number;
   bestResults: Record<string, BestResult>;
   drafts: Record<string, FactoryDraft>;
-  chapterTwoSeeds: Record<number, number>;
+  orderScenarioSeeds: Record<number, number>;
 }
 
 type GameSaveReader = Pick<Storage, "getItem">;
 type GameSaveWriter = GameSaveReader & Partial<Pick<Storage, "setItem">>;
 type GameSaveStore = GameSaveWriter & Partial<Pick<Storage, "removeItem">>;
 
-export const SAVE_VERSION: 2;
+export const SAVE_VERSION: 3;
 export const SAVE_STORAGE_KEY: string;
 export const DEFAULT_SAVE_STATE: Readonly<GameSaveState>;
 export function createDefaultSaveState(): GameSaveState;

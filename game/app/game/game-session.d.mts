@@ -16,7 +16,7 @@ export interface RestoredGameSession {
   unlockedLevel: number;
   bestResults: Record<number, BestResult>;
   drafts: Record<number, FactoryDesign>;
-  chapterTwoSeeds: Record<number, number>;
+  orderScenarioSeeds: Record<number, number>;
   scenario: ProductionScenario | null;
   design: FactoryDesign;
   state: ProductionState;
@@ -32,7 +32,7 @@ export interface PersistedGameSession {
   unlockedLevel: number;
   bestResults: Record<number, BestResult>;
   drafts: Record<number, FactoryDesign>;
-  chapterTwoSeeds: Record<number, number>;
+  orderScenarioSeeds: Record<number, number>;
   design: FactoryDesign;
   state: Pick<ProductionState, "mode">;
 }
@@ -42,7 +42,7 @@ export interface PersistableGameSession {
   unlockedLevel: number;
   bestResults: Record<number, BestResult>;
   drafts?: Record<number, FactoryDesign>;
-  chapterTwoSeeds: Record<number, number>;
+  orderScenarioSeeds: Record<number, number>;
   design: FactoryDesign;
   state: Pick<ProductionState, "mode">;
 }
@@ -51,7 +51,7 @@ type GameSaveStorage = Pick<Storage, "getItem"> & Partial<Pick<Storage, "setItem
 type GameSaveStore = GameSaveStorage & Partial<Pick<Storage, "removeItem">>;
 
 export function recordBestResult(bestResults: Record<number, BestResult>, levelId: number, result: BestResult): Record<number, BestResult>;
-export function generateChapterTwoSeed(
+export function generateOrderScenarioSeed(
   previousSeed?: number,
   cryptoSource?: Pick<Crypto, "getRandomValues">,
 ): number;

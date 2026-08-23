@@ -43,7 +43,7 @@ export function useGameSession(options: {
     unlockedLevel: persistedUnlockedLevel,
     bestResults: persistedBestResults,
     drafts: persistedDrafts,
-    chapterTwoSeeds: persistedChapterTwoSeeds,
+    orderScenarioSeeds: persistedOrderScenarioSeeds,
     design: persistedDesign,
   } = session;
   const persistedStateMode = session.state.mode;
@@ -77,7 +77,7 @@ export function useGameSession(options: {
       unlockedLevel: persistedUnlockedLevel,
       bestResults: persistedBestResults,
       drafts: persistedDrafts,
-      chapterTwoSeeds: persistedChapterTwoSeeds,
+      orderScenarioSeeds: persistedOrderScenarioSeeds,
       design: persistedDesign,
       state: { mode: persistedStateMode },
     }),
@@ -86,7 +86,7 @@ export function useGameSession(options: {
       persistedUnlockedLevel,
       persistedBestResults,
       persistedDrafts,
-      persistedChapterTwoSeeds,
+      persistedOrderScenarioSeeds,
       persistedDesign,
       persistedStateMode,
     ],

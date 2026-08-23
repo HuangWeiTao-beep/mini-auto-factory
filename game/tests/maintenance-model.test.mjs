@@ -74,6 +74,18 @@ test("request rejects machines without an existing reliability record", () => {
   assert.deepEqual(state.maintenance.queue, []);
 });
 
+test("move reorders any waiting maintenance job, including repair", () => {
+  const state = runtimeWithMachines(["lathe", "drill"]);
+  state.maintenance.queue = [
+    { machineId: "lathe", kind: "planned", remaining: 4 },
+    { machineId: "drill", kind: "repair", remaining: 7 },
+  ];
+  state.machines.lathe.reliability.status = "maintenance-pending";
+  state.machines.drill.reliability.status = "broken";
+  const moved = moveMaintenanceRequest(state, "drill", 0);
+  assert.deepEqual(moved.maintenance.queue.map((job) => job.machineId), ["drill", "lathe"]);
+});
+
 test("one crew preserves queue order and planned maintenance wins at 100 percent", () => {
   const state = runtimeWithMachines(["lathe", "drill"]);
   state.machines.lathe.active = "blank";

@@ -66,7 +66,7 @@ export function cancelMaintenanceRequest(state, machineId) {
 
 export function moveMaintenanceRequest(state, machineId, nextIndex) {
   const queue = state?.maintenance?.queue ?? [];
-  const index = queue.findIndex((job) => job.machineId === machineId && job.kind === "planned");
+  const index = queue.findIndex((job) => job.machineId === machineId);
   if (index < 0 || queue.length < 2) return state;
   const next = cloneRuntimeState(state);
   const [job] = next.maintenance.queue.splice(index, 1);

@@ -93,6 +93,27 @@ export const ORDER_SCENARIO_RULES = Object.freeze({
     productPool: ["standard", "precision", "rustproof"],
     paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "exit"],
   }),
+  13: freezeRule({
+    orderCount: 8,
+    arrivalWindow: [0, 28],
+    deadlineLeadWindow: [28, 36],
+    productPool: ["standard", "precision", "hardened", "hardened"],
+    paletteTypes: ["source", "cutter", "lathe", "drill", "heatTreater", "exit"],
+  }),
+  14: freezeRule({
+    orderCount: 10,
+    arrivalWindow: [0, 40],
+    deadlineLeadWindow: [26, 38],
+    productPool: ["standard", "precision", "rustproof", "hardened"],
+    paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "heatTreater", "exit"],
+  }),
+  15: freezeRule({
+    orderCount: 12,
+    arrivalWindow: [0, 50],
+    deadlineLeadWindow: [28, 42],
+    productPool: ["standard", "precision", "rustproof", "hardened"],
+    paletteTypes: ["source", "cutter", "lathe", "drill", "coater", "heatTreater", "exit"],
+  }),
 });
 
 const round = (value) => Math.round(value * 1000) / 1000;

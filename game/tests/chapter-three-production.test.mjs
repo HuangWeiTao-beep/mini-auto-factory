@@ -7,8 +7,56 @@ import {
   connectDevices,
   createEmptyDesign,
   createProductionState,
+  createScenarioValidationDesign,
 } from "../app/game/factory-model.mjs";
 import { requestMaintenance } from "../app/game/maintenance-model.mjs";
+
+test("chapter three exposes five maintenance levels with the approved progression", () => {
+  assert.deepEqual(
+    Object.values(LEVELS)
+      .filter((level) => level.chapter === 3)
+      .map((level) => level.id),
+    [11, 12, 13, 14, 15],
+  );
+  assert.equal(LEVELS[11].mode, "production");
+  assert.equal(LEVELS[12].mode, "production");
+  assert.equal(LEVELS[13].mode, "orderScheduling");
+  assert.deepEqual(LEVELS[13].orderConfig.productPool, [
+    "standard",
+    "precision",
+    "hardened",
+    "hardened",
+  ]);
+  assert.equal(LEVELS[15].target, 12);
+});
+
+test("chapter three fixed and scenario-validation layouts have no collisions", () => {
+  for (const levelId of [11, 12, 13, 14, 15]) {
+    const level = LEVELS[levelId];
+    const design = createScenarioValidationDesign(level);
+    const devices = Object.values(design.devices);
+
+    for (const device of devices) {
+      assert.equal(
+        level.obstacles.some(
+          (obstacle) => obstacle.gridX === device.gridX && obstacle.gridY === device.gridY,
+        ),
+        false,
+        `${device.id} must not be placed on an obstacle`,
+      );
+    }
+    for (const [index, device] of devices.entries()) {
+      for (const other of devices.slice(index + 1)) {
+        assert.equal(
+          Math.abs(device.gridX - other.gridX) * 36 < 154 &&
+            Math.abs(device.gridY - other.gridY) * 36 < 132,
+          false,
+          `${device.id} and ${other.id} must not overlap`,
+        );
+      }
+    }
+  }
+});
 
 const maintenanceLevel = {
   ...LEVELS[1],

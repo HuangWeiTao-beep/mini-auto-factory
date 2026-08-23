@@ -24,7 +24,7 @@ export interface OrderConfig {
   orderCount: number;
   arrivalWindow: readonly [number, number];
   deadlineLeadWindow: readonly [number, number];
-  productPool: readonly ("standard" | "precision" | "rustproof")[];
+  productPool: readonly ("standard" | "precision" | "rustproof" | "hardened")[];
   paletteTypes: readonly LevelDeviceType[];
 }
 
@@ -186,6 +186,7 @@ export function createOrderScenario(
   levelId: number,
   seed: string | number,
 ): ProductionScenario;
+export function createScenarioValidationDesign(level: LevelConfig): FactoryDesign;
 export function addDevice(design: FactoryDesign, type: DeviceType, x: number, y: number, id?: string): FactoryDesign;
 export function moveDevice(design: FactoryDesign, id: string, x: number, y: number): FactoryDesign;
 export function canPlaceDevice(design: FactoryDesign, level: LevelConfig, cell: GridCell, ignoredDeviceId?: string | null): boolean;

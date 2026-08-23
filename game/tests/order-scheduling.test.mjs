@@ -178,3 +178,15 @@ test("every chapter-two seed keeps the intended product mix", () => {
     assert.deepEqual([...productIds].sort(), ["precision", "rustproof", "standard"]);
   }
 });
+
+for (const [levelId, seed] of [[13, 2313], [14, 2414], [15, 2515]]) {
+  test(`level ${levelId} scenario is deterministic and contains every configured product`, () => {
+    const first = createOrderScenario(levelId, seed);
+    const second = createOrderScenario(levelId, seed);
+
+    assert.deepEqual(second, first);
+    for (const productId of new Set(LEVELS[levelId].orderConfig.productPool)) {
+      assert.ok(first.orders.some((order) => order.productId === productId));
+    }
+  });
+}

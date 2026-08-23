@@ -129,7 +129,7 @@ test("legacy saves cannot carry unlocks, active levels, drafts, or records past 
       10: { devices: {}, connections: [] },
       15: { devices: {}, connections: [] },
     },
-    chapterTwoSeeds: { 6: 1606 },
+    chapterTwoSeeds: { 10: 2010, 13: 2313, 15: 2515 },
   };
 
   assert.deepEqual(parseGameSave(JSON.stringify(legacy)), {
@@ -138,7 +138,7 @@ test("legacy saves cannot carry unlocks, active levels, drafts, or records past 
     activeLevelId: 1,
     bestResults: { 10: { elapsed: 73.4, completed: 12 } },
     drafts: { 10: { devices: {}, connections: [] } },
-    orderScenarioSeeds: { 6: 1606 },
+    orderScenarioSeeds: { 10: 2010 },
   });
 });
 

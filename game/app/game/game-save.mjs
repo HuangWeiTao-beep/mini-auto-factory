@@ -52,7 +52,7 @@ function isValidSaveState(value) {
   );
 }
 
-function normalizeOrderScenarioSeeds(value) {
+function normalizeOrderScenarioSeeds(value, maxLevelId = MAX_SAVE_LEVEL_ID) {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
     Object.entries(value).filter(([levelId, seed]) => {
@@ -61,6 +61,7 @@ function normalizeOrderScenarioSeeds(value) {
         Number.isInteger(numericLevelId) &&
         String(numericLevelId) === levelId &&
         ORDER_SCENARIO_LEVEL_IDS.has(numericLevelId) &&
+        numericLevelId <= maxLevelId &&
         Number.isInteger(seed) &&
         seed >= 0 &&
         seed <= MAX_SEED
@@ -105,6 +106,7 @@ function normalizeSaveState(state) {
       ? {}
       : normalizeOrderScenarioSeeds(
         state.version === 2 ? state.chapterTwoSeeds : state.orderScenarioSeeds,
+        maxLevelId,
       ),
   };
 }

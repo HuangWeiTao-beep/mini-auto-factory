@@ -35,10 +35,11 @@ export const DEVICE_TYPES = Object.freeze({
   lathe: createDeviceSpec("车削机", "blank", "bolt", 3, "⚙", "LATHE 03"),
   drill: createDeviceSpec("钻孔机", "undrilledBolt", "bolt", 2, "◉", "DRILL 04"),
   coater: createDeviceSpec("镀层机", "bolt", "coatedBolt", 2, "◌", "COATER 05"),
+  heatTreater: createDeviceSpec("热处理炉", "bolt", "hardenedBolt", 3, "♨", "HEAT 06"),
   exit: createDeviceSpec("成品出口", "bolt", null, 0, "✓", "EXIT 99"),
 });
 
-export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill", "coater"]);
+export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill", "coater", "heatTreater"]);
 
 export const MATERIALS = Object.freeze({
   rod: { label: "长钢棒", shortLabel: "钢棒" },
@@ -46,6 +47,7 @@ export const MATERIALS = Object.freeze({
   bolt: { label: "螺栓", shortLabel: "螺栓" },
   undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
   coatedBolt: { label: "防锈螺栓", shortLabel: "防锈" },
+  hardenedBolt: { label: "强化螺栓", shortLabel: "强化" },
 });
 
 const DEFAULT_CONNECTION_RULES = Object.freeze({
@@ -750,7 +752,7 @@ function deliverToTarget(state, design, level, line) {
   const machine = state.machines[device.id];
   if (!machine.active && !machine.output) {
     machine.active = item.kind;
-    machine.remaining = level.machineDurations[device.type];
+    machine.remaining = level.machineDurations[device.type] ?? DEVICE_TYPES[device.type].duration;
     machine.status = "working";
     line.item = null;
     return true;
@@ -806,6 +808,7 @@ function orderMaterialOutput(type) {
     lathe: "bolt",
     drill: "bolt",
     coater: "coatedBolt",
+    heatTreater: "hardenedBolt",
   }[type];
 }
 
@@ -870,7 +873,7 @@ function deliverOrderMaterial(state, design, level, line, item, device) {
   const material = orderMaterial(item);
   if (!machine.active && !machine.output) {
     machine.active = material;
-    machine.remaining = level.machineDurations[device.type];
+    machine.remaining = level.machineDurations[device.type] ?? DEVICE_TYPES[device.type].duration;
     machine.status = "working";
     line.item = null;
     return true;
@@ -993,7 +996,7 @@ function tickOrderScheduling(state, design, level, delta) {
     if (!machine.active && !machine.output && machine.waiting) {
       machine.active = machine.waiting;
       machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type];
+      machine.remaining = level.machineDurations[design.devices[id].type] ?? DEVICE_TYPES[design.devices[id].type].duration;
       machine.status = "working";
     }
   }
@@ -1100,7 +1103,7 @@ function tick(state, design, level, delta) {
     if (!machine.active && !machine.output && machine.waiting) {
       machine.active = machine.waiting;
       machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type];
+      machine.remaining = level.machineDurations[design.devices[id].type] ?? DEVICE_TYPES[design.devices[id].type].duration;
       machine.status = "working";
     }
   }

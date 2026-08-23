@@ -1,11 +1,11 @@
-export type DeviceType = "source" | "cutter" | "lathe" | "drill" | "coater" | "exit";
+export type DeviceType = "source" | "cutter" | "lathe" | "drill" | "coater" | "heatTreater" | "exit";
 export type LevelDeviceType = DeviceType;
-export type ProcessingDeviceType = "cutter" | "lathe" | "drill" | "coater";
-export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt" | "coatedBolt";
+export type ProcessingDeviceType = "cutter" | "lathe" | "drill" | "coater" | "heatTreater";
+export type MaterialType = "rod" | "blank" | "undrilledBolt" | "bolt" | "coatedBolt" | "hardenedBolt";
 export type GameMode = "design" | "running" | "paused" | "success" | "failure";
 export type TransportMode = "fixed" | "distance";
 export type LevelMode = "production" | "orderScheduling";
-export type ProductId = "standard" | "precision" | "rustproof";
+export type ProductId = "standard" | "precision" | "rustproof" | "hardened";
 export type OrderStatus =
   | "scheduled"
   | "waiting"

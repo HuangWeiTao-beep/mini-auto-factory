@@ -316,6 +316,51 @@ test("a rustproof order bypassing coating is rejected with the expected next ope
   assert.equal(state.lines["lathe->exit"].item.status, "blocked");
 });
 
+test("a hardened order bypassing heat treatment is rejected", () => {
+  const level = LEVELS[8];
+  let design = createEmptyDesign();
+  for (const [index, type] of ["source", "cutter", "lathe", "exit"].entries()) {
+    design = addNamedDevice(design, type, type, index);
+  }
+  design = connectDevices(design, "source", "cutter", level);
+  design = connectDevices(design, "cutter", "lathe", level);
+  design = connectDevices(design, "lathe", "exit", level);
+  const scenario = createScenario(8, [
+    { id: "hardened-order", productId: "hardened", deadlineAt: 60 },
+  ]);
+  let state = enqueueProductionOrder(startScenario(design, level, scenario), "hardened-order");
+
+  state = advanceProduction(state, design, level, 20);
+
+  assert.equal(state.completed, 0);
+  assert.equal(state.orders[0].status, "inProduction");
+  assert.match(state.warning, /hardened-order/);
+  assert.match(state.warning, /热处理炉/);
+  assert.equal(state.lines["lathe->exit"].item.status, "blocked");
+});
+
+test("a hardened order completes through heat treatment", () => {
+  const level = LEVELS[8];
+  let design = createEmptyDesign();
+  for (const [index, type] of ["source", "cutter", "lathe", "heatTreater", "exit"].entries()) {
+    design = addNamedDevice(design, type, type, index);
+  }
+  design = connectDevices(design, "source", "cutter", level);
+  design = connectDevices(design, "cutter", "lathe", level);
+  design = connectDevices(design, "lathe", "heatTreater", level);
+  design = connectDevices(design, "heatTreater", "exit", level);
+  const scenario = createScenario(8, [
+    { id: "hardened-order", productId: "hardened", deadlineAt: 60 },
+  ]);
+  let state = enqueueProductionOrder(startScenario(design, level, scenario), "hardened-order");
+
+  state = advanceProduction(state, design, level, 30);
+
+  assert.equal(state.mode, "success");
+  assert.equal(state.completed, 1);
+  assert.deepEqual(state.completedOrderIds, ["hardened-order"]);
+});
+
 test("a product identity mismatch is not delivered and reports the real order's next step", () => {
   const level = LEVELS[6];
   let design = createEmptyDesign();

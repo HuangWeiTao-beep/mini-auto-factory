@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEVICE_TYPES,
   LEVELS,
+  MATERIALS,
   createOrderScenario,
   getAllowedPaletteTypes,
   isOrderSchedulingLevel,
@@ -51,8 +53,8 @@ test("seeded random produces a stable deterministic number stream", () => {
   assert.notDeepEqual(sampleA, sampleC);
 });
 
-test("product catalog exposes the three chapter-two recipes", () => {
-  assert.deepEqual(Object.keys(PRODUCTS), ["standard", "precision", "rustproof"]);
+test("product catalog exposes the four chapter-two recipes", () => {
+  assert.deepEqual(Object.keys(PRODUCTS), ["standard", "precision", "rustproof", "hardened"]);
   assert.deepEqual(getProduct("rustproof"), {
     id: "rustproof",
     label: "防锈螺栓",
@@ -60,6 +62,16 @@ test("product catalog exposes the three chapter-two recipes", () => {
     colorToken: "order-rustproof",
     route: ["source", "cutter", "lathe", "coater", "exit"],
   });
+});
+
+test("hardened bolts use the heat-treatment route", () => {
+  assert.deepEqual(PRODUCTS.hardened.route, [
+    "source", "cutter", "lathe", "heatTreater", "exit",
+  ]);
+  assert.equal(DEVICE_TYPES.heatTreater.label, "热处理炉");
+  assert.equal(DEVICE_TYPES.heatTreater.accepts, "bolt");
+  assert.equal(DEVICE_TYPES.heatTreater.produces, "hardenedBolt");
+  assert.equal(MATERIALS.hardenedBolt.label, "强化螺栓");
 });
 
 test("palette shuffle is deterministic and preserves the allowed machine set", () => {

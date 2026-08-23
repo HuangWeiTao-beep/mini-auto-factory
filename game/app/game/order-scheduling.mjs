@@ -13,6 +13,9 @@ const PRODUCT_ROUTE_RUSTPROOF = Object.freeze([
   "coater",
   "exit",
 ]);
+const PRODUCT_ROUTE_HARDENED = Object.freeze([
+  "source", "cutter", "lathe", "heatTreater", "exit",
+]);
 
 export const PRODUCTS = Object.freeze({
   standard: Object.freeze({
@@ -35,6 +38,13 @@ export const PRODUCTS = Object.freeze({
     ariaLabel: "防锈螺栓订单",
     colorToken: "order-rustproof",
     route: PRODUCT_ROUTE_RUSTPROOF,
+  }),
+  hardened: Object.freeze({
+    id: "hardened",
+    label: "强化螺栓",
+    ariaLabel: "强化螺栓订单",
+    colorToken: "order-hardened",
+    route: PRODUCT_ROUTE_HARDENED,
   }),
 });
 

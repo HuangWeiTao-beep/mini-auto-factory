@@ -102,14 +102,11 @@ export function applyCompletedMachineCycle(state, machineId, deviceType, level) 
 function startNextMaintenance(state, level) {
   if (state.maintenance.activeJob) return;
   const queue = state.maintenance.queue ?? [];
-  const index = queue.findIndex((job) => {
-    const machine = state.machines?.[job.machineId];
-    return machine && !machine.active;
-  });
-  if (index < 0) return;
-  const [job] = queue.splice(index, 1);
+  const job = queue[0];
+  const machine = job ? state.machines?.[job.machineId] : null;
+  if (!job || !machine || machine.active) return;
+  queue.shift();
   state.maintenance.activeJob = { ...job };
-  const machine = state.machines[job.machineId];
   machine.reliability = {
     ...(machine.reliability ?? createMachineReliability()),
     status: "under-maintenance",

@@ -117,11 +117,14 @@ test("active material delays starting queued maintenance and a new job does not 
   const requested = requestMaintenance(requestMaintenance(state, "lathe", level), "drill", level);
   requested.machines.lathe.active = "blank";
   advanceMaintenance(requested, level, 1);
-  assert.equal(requested.maintenance.activeJob.machineId, "drill");
-  assert.equal(requested.maintenance.activeJob.remaining, 4);
-  assert.equal(requested.maintenance.queue[0].machineId, "lathe");
-  advanceMaintenance(requested, level, 1);
-  assert.equal(requested.maintenance.activeJob.remaining, 3);
+  assert.equal(requested.maintenance.activeJob, null);
+  assert.deepEqual(requested.maintenance.queue.map((job) => job.machineId), ["lathe", "drill"]);
+  const moved = moveMaintenanceRequest(requested, "drill", 0);
+  advanceMaintenance(moved, level, 1);
+  assert.equal(moved.maintenance.activeJob.machineId, "drill");
+  assert.equal(moved.maintenance.activeJob.remaining, 4);
+  advanceMaintenance(moved, level, 1);
+  assert.equal(moved.maintenance.activeJob.remaining, 3);
 });
 
 test("maintenance completion resets wear and material acceptance follows status", () => {

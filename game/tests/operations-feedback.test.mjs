@@ -128,6 +128,51 @@ test("dangerous maintenance outranks stable scheduling", () => {
   });
 });
 
+for (const maintenanceStatus of ["maintenance-pending", "under-maintenance"]) {
+  test(`passive ${maintenanceStatus} danger does not hide a scheduling monitor`, () => {
+    const orders = [order("L13-01", 20)];
+    const input = operationsState({ orders, queue: ["L13-01"] });
+    input.state.machines.lathe.reliability = { wear: 88, status: maintenanceStatus };
+    if (maintenanceStatus === "under-maintenance") {
+      input.state.maintenance.activeJob = {
+        machineId: "lathe",
+        kind: "planned",
+        remaining: 1_000,
+      };
+    } else {
+      input.state.maintenance.queue.push({
+        machineId: "lathe",
+        kind: "planned",
+        remaining: 1_000,
+      });
+    }
+
+    const result = feedback(input);
+
+    assert.equal(result.maintenance.recommendation.kind, "stable");
+    assert.equal(result.scheduling.recommendation.kind, "monitor");
+    assert.deepEqual(result.recommendation, {
+      kind: "monitor",
+      message: "普通螺栓预测受阻，请检查下游连接与等待位。",
+    });
+  });
+}
+
+test("a passive maintenance monitor is kept after stable scheduling", () => {
+  const orders = [order("L13-01", 11)];
+  const input = operationsState({ orders, queue: ["L13-01"] });
+  input.state.machines.cutter.reliability.wear = 88;
+
+  const result = feedback(input);
+
+  assert.equal(result.scheduling.recommendation.kind, "stable");
+  assert.equal(result.maintenance.recommendation.kind, "monitor");
+  assert.deepEqual(result.recommendation, {
+    kind: "monitor",
+    message: "切割机还能加工 2 件，但订单 L13-01 交付紧张，建议订单完成后维护。",
+  });
+});
+
 test("stable operations feedback omits action identifiers", () => {
   const input = operationsState({ orders: [], queue: [] });
 

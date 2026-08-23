@@ -115,3 +115,49 @@ test("a machine type without a wear rate is not treated as one cycle from failur
     message: "维护平稳：目前没有高风险设备。",
   });
 });
+
+test("hypothetical forecasts evaluate only the first three candidates by band remaining cycles and id", () => {
+  const design = {
+    devices: {
+      "warning-a": device("warning-a", "cutter", 1),
+      "danger-c": device("danger-c", "lathe", 2),
+      "danger-b": device("danger-b", "heatTreater", 3),
+      "danger-a": device("danger-a", "heatTreater", 4),
+    },
+    connections: [],
+  };
+  const candidateLevel = {
+    ...level,
+    maintenance: {
+      ...level.maintenance,
+      wearPerCycle: { cutter: 16, lathe: 10, heatTreater: 12 },
+    },
+  };
+  const state = createProductionState(design, candidateLevel, { orders: [], queue: [] });
+  state.machines["warning-a"].reliability.wear = 84;
+  state.machines["danger-c"].reliability.wear = 85;
+  state.machines["danger-b"].reliability.wear = 88;
+  state.machines["danger-a"].reliability.wear = 88;
+  const forecastedMachineIds = [];
+  const realStructuredClone = globalThis.structuredClone;
+  globalThis.structuredClone = (value, options) => {
+    const plannedJob = value?.maintenance?.queue?.find((job) => job.kind === "planned");
+    if (plannedJob) forecastedMachineIds.push(plannedJob.machineId);
+    return realStructuredClone(value, options);
+  };
+
+  let result;
+  try {
+    result = getMaintenanceFeedback({ state, design, level: candidateLevel });
+  } finally {
+    globalThis.structuredClone = realStructuredClone;
+  }
+
+  assert.deepEqual(result.machines.map(({ id }) => id), [
+    "danger-a",
+    "danger-b",
+    "danger-c",
+    "warning-a",
+  ]);
+  assert.deepEqual(forecastedMachineIds, ["danger-a", "danger-b", "danger-c"]);
+});

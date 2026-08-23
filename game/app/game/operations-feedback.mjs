@@ -34,16 +34,16 @@ function chooseRecommendation(scheduling, maintenance) {
     return withoutPassiveIdentifier(schedulingRecommendation);
   }
 
-  const dangerousMachine = maintenance.machines.find(
-    (machine) => machine.band === "danger"
-      || (machine.remainingCycles > 0 && machine.remainingCycles <= 1),
-  );
-  if (maintenanceRecommendation.kind === "scheduleMaintenance" || dangerousMachine) {
+  if (maintenanceRecommendation.kind === "scheduleMaintenance") {
     return withoutPassiveIdentifier(maintenanceRecommendation);
   }
 
   if (schedulingRecommendation.kind !== "stable") {
     return withoutPassiveIdentifier(schedulingRecommendation);
+  }
+
+  if (maintenanceRecommendation.kind === "monitor") {
+    return withoutPassiveIdentifier(maintenanceRecommendation);
   }
 
   return { kind: "stable", message: "运营平稳：目前没有高风险订单或设备。" };

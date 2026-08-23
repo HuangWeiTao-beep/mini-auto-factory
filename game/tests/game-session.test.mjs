@@ -113,6 +113,39 @@ test("maintenance session actions preserve identity for no-ops and reorder waiti
   assert.strictEqual(moveSessionMaintenance(inactive, "lathe", 1), inactive);
 });
 
+test("session actions prioritize a waiting repair but never cancel it", () => {
+  const planned = requestSessionMaintenance(chapterThreeSession("running"), "cutter");
+  const mixed = {
+    ...planned,
+    state: {
+      ...planned.state,
+      machines: {
+        ...planned.state.machines,
+        lathe: {
+          ...planned.state.machines.lathe,
+          reliability: { wear: 100, status: "broken" },
+        },
+      },
+      maintenance: {
+        ...planned.state.maintenance,
+        queue: [
+          ...planned.state.maintenance.queue,
+          { machineId: "lathe", kind: "repair", remaining: 7 },
+        ],
+      },
+    },
+  };
+
+  const prioritized = prioritizeSessionMaintenance(mixed, "lathe");
+
+  assert.notStrictEqual(prioritized, mixed);
+  assert.deepEqual(
+    prioritized.state.maintenance.queue.map((job) => [job.machineId, job.kind]),
+    [["lathe", "repair"], ["cutter", "planned"]],
+  );
+  assert.strictEqual(cancelSessionMaintenance(prioritized, "lathe"), prioritized);
+});
+
 test("restoring a selected level recovers its unlocked progress, best result, and draft", () => {
   const storage = memoryStorage();
   saveGameSave(storage, {

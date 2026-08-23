@@ -14,6 +14,14 @@ import {
   enqueueWaitingOrder,
   moveQueuedOrder,
 } from "./order-scheduling.mjs";
+import {
+  advanceMaintenance,
+  applyCompletedMachineCycle,
+  canMachineAcceptMaterial,
+  createMachineReliability,
+  createMaintenanceState,
+  getProcessingDuration,
+} from "./maintenance-model.mjs";
 
 const createDeviceSpec = (label, accepts, produces, duration, icon, eyebrow) =>
   Object.freeze({
@@ -76,6 +84,12 @@ const freezeLevel = (level) =>
             ...level.orderConfig.deadlineLeadWindow,
           ]),
           productPool: Object.freeze([...level.orderConfig.productPool]),
+        })
+      : null,
+    maintenance: level.maintenance
+      ? Object.freeze({
+          ...level.maintenance,
+          wearPerCycle: Object.freeze({ ...level.maintenance.wearPerCycle }),
         })
       : null,
   });
@@ -326,6 +340,11 @@ export function isOrderSchedulingLevel(levelOrId) {
   return levelOrId?.mode === "orderScheduling";
 }
 
+export function isMaintenanceLevel(levelOrId) {
+  if (typeof levelOrId === "number") return LEVELS[levelOrId]?.maintenance != null;
+  return levelOrId?.maintenance != null;
+}
+
 export function getAllowedPaletteTypes(level) {
   if (level.paletteTypes?.length) return [...level.paletteTypes];
   return Object.keys(level.deviceLimits).filter(
@@ -453,6 +472,7 @@ export function createProductionState(design, level, scenario) {
         waiting: null,
         output: null,
         warning: null,
+        ...(isMaintenanceLevel(level) ? { reliability: createMachineReliability() } : {}),
       };
     }
   }
@@ -473,6 +493,7 @@ export function createProductionState(design, level, scenario) {
     ),
     lines,
     warning: null,
+    ...(isMaintenanceLevel(level) ? { maintenance: createMaintenanceState() } : {}),
   };
   if (!isOrderSchedulingLevel(level)) return baseState;
 
@@ -712,6 +733,18 @@ function selectOutgoingLine(state, design, deviceId, material = null) {
   return line && !line.item ? connection : null;
 }
 
+function beginMachineWork(machine, material, deviceType, level) {
+  if (!canMachineAcceptMaterial(machine) || machine.active || machine.output) return false;
+  machine.active = material;
+  machine.remaining = getProcessingDuration(
+    machine,
+    level.machineDurations[deviceType] ?? DEVICE_TYPES[deviceType].duration,
+    level,
+  );
+  machine.status = "working";
+  return true;
+}
+
 function deliverToTarget(state, design, level, line) {
   const item = line.item;
   const device = design.devices[line.to];
@@ -750,12 +783,13 @@ function deliverToTarget(state, design, level, line) {
   }
 
   const machine = state.machines[device.id];
-  if (!machine.active && !machine.output) {
-    machine.active = item.kind;
-    machine.remaining = level.machineDurations[device.type] ?? DEVICE_TYPES[device.type].duration;
-    machine.status = "working";
+  if (beginMachineWork(machine, item.kind, device.type, level)) {
     line.item = null;
     return true;
+  }
+  if (!canMachineAcceptMaterial(machine)) {
+    item.status = "waiting";
+    return false;
   }
   if (!machine.waiting) {
     machine.waiting = item.kind;
@@ -871,12 +905,13 @@ function deliverOrderMaterial(state, design, level, line, item, device) {
 
   const machine = state.machines[device.id];
   const material = orderMaterial(item);
-  if (!machine.active && !machine.output) {
-    machine.active = material;
-    machine.remaining = level.machineDurations[device.type] ?? DEVICE_TYPES[device.type].duration;
-    machine.status = "working";
+  if (beginMachineWork(machine, material, device.type, level)) {
     line.item = null;
     return true;
+  }
+  if (!canMachineAcceptMaterial(machine)) {
+    item.status = "waiting";
+    return false;
   }
   if (!machine.waiting) {
     machine.waiting = material;
@@ -966,6 +1001,7 @@ function tickOrderScheduling(state, design, level, delta) {
     machine.active = null;
     machine.remaining = 0;
     machine.status = "ready";
+    applyCompletedMachineCycle(state, id, design.devices[id].type, level);
   }
 
   for (const line of Object.values(state.lines)) {
@@ -974,7 +1010,10 @@ function tickOrderScheduling(state, design, level, delta) {
       line.item?.status === "waiting"
     ) {
       deliverToTarget(state, design, level, line);
-      if (state.mode === "success") return;
+      if (state.mode === "success") {
+        advanceMaintenance(state, level, delta);
+        return;
+      }
     }
   }
 
@@ -994,13 +1033,13 @@ function tickOrderScheduling(state, design, level, delta) {
       });
     }
     if (!machine.active && !machine.output && machine.waiting) {
-      machine.active = machine.waiting;
-      machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type] ?? DEVICE_TYPES[design.devices[id].type].duration;
-      machine.status = "working";
+      if (beginMachineWork(machine, machine.waiting, design.devices[id].type, level)) {
+        machine.waiting = null;
+      }
     }
   }
 
+  advanceMaintenance(state, level, delta);
   settleOverdueOrders(state);
 }
 
@@ -1071,6 +1110,7 @@ function tick(state, design, level, delta) {
         machine.active = null;
         machine.remaining = 0;
         machine.status = "ready";
+        applyCompletedMachineCycle(state, id, design.devices[id].type, level);
       }
     }
   }
@@ -1081,7 +1121,10 @@ function tick(state, design, level, delta) {
       line.item?.status === "waiting"
     ) {
       deliverToTarget(state, design, level, line);
-      if (state.mode === "success") return;
+      if (state.mode === "success") {
+        advanceMaintenance(state, level, delta);
+        return;
+      }
     }
   }
 
@@ -1101,13 +1144,13 @@ function tick(state, design, level, delta) {
       });
     }
     if (!machine.active && !machine.output && machine.waiting) {
-      machine.active = machine.waiting;
-      machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type] ?? DEVICE_TYPES[design.devices[id].type].duration;
-      machine.status = "working";
+      if (beginMachineWork(machine, machine.waiting, design.devices[id].type, level)) {
+        machine.waiting = null;
+      }
     }
   }
 
+  advanceMaintenance(state, level, delta);
   if (state.elapsed >= level.duration && state.mode !== "success") {
     state.elapsed = level.duration;
     state.mode = "failure";

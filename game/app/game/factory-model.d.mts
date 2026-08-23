@@ -6,6 +6,7 @@ export type GameMode = "design" | "running" | "paused" | "success" | "failure";
 export type TransportMode = "fixed" | "distance";
 export type LevelMode = "production" | "orderScheduling";
 export type ProductId = "standard" | "precision" | "rustproof" | "hardened";
+export type MaintenanceStatus = "available" | "maintenance-pending" | "under-maintenance" | "broken";
 export type OrderStatus =
   | "scheduled"
   | "waiting"
@@ -34,7 +35,7 @@ export interface GridCell {
 
 export interface LevelConfig {
   id: number;
-  chapter: 1 | 2;
+  chapter: 1 | 2 | 3;
   mode: LevelMode;
   name: string;
   routeHint: string;
@@ -48,6 +49,13 @@ export interface LevelConfig {
   connectionRules: ConnectionRules;
   paletteTypes: readonly LevelDeviceType[];
   orderConfig: OrderConfig | null;
+  maintenance?: null | {
+    plannedDuration: number;
+    repairDuration: number;
+    slowdownThreshold: number;
+    failureThreshold: number;
+    wearPerCycle: Readonly<Partial<Record<ProcessingDeviceType, number>>>;
+  };
   obstacles: readonly GridCell[];
   step: number;
 }
@@ -133,6 +141,7 @@ export interface ProductionState {
     waiting: MaterialType | OrderMaterial | null;
     output: MaterialType | OrderMaterial | null;
     warning: string | null;
+    reliability?: { wear: number; status: MaintenanceStatus };
   }>;
   routingCursor: Record<string, number>;
   lines: Record<string, LineState>;
@@ -143,6 +152,10 @@ export interface ProductionState {
   failure?: OrderFailure | null;
   scenarioSeed?: string | number | null;
   scenarioLevelId?: number;
+  maintenance?: {
+    activeJob: null | { machineId: string; kind: "planned" | "repair"; remaining: number };
+    queue: { machineId: string; kind: "planned" | "repair"; remaining: number }[];
+  };
 }
 
 export const DEVICE_TYPES: Record<DeviceType, {
@@ -163,6 +176,7 @@ export const LEVELS: Readonly<Record<number, LevelConfig>>;
 export const LEVEL_CONFIG: LevelConfig;
 export function getLevelConfig(levelId: number): LevelConfig | undefined;
 export function isOrderSchedulingLevel(levelOrId: number | LevelConfig): boolean;
+export function isMaintenanceLevel(levelOrId: number | LevelConfig): boolean;
 export function getAllowedPaletteTypes(level: LevelConfig): LevelDeviceType[];
 export function getDeviceLimit(level: LevelConfig, type: LevelDeviceType): number;
 export function getTransportDuration(level: LevelConfig, from: GridCell, to: GridCell): number;

@@ -194,7 +194,6 @@ function simulateChapterThreeLevel(levelId) {
     design,
     level,
   });
-
   while (state.mode === "running" && state.elapsed < level.duration) {
     state = advanceProduction(state, design, level, level.step);
     if (level.orderConfig) {
@@ -242,13 +241,23 @@ test("levels eleven through fifteen complete with legal layouts and at least fif
   assert.deepEqual(results, [
     { levelId: 11, elapsed: 40.52, relevantLimit: 58, slackRatio: 0.3013793103448275 },
     { levelId: 12, elapsed: 49.08, relevantLimit: 68, slackRatio: 0.2782352941176471 },
-    { levelId: 13, elapsed: 51.44, relevantLimit: 61, slackRatio: 0.15672131147540988 },
+    { levelId: 13, elapsed: 51.45, relevantLimit: 61, slackRatio: 0.15655737704918027 },
     { levelId: 14, elapsed: 58, relevantLimit: 70, slackRatio: 0.17142857142857143 },
     { levelId: 15, elapsed: 67, relevantLimit: 79, slackRatio: 0.1518987341772152 },
   ]);
 });
 
-function simulateLevelFifteenRecovery() {
+function finishLevelFifteenAttempt(state, design, level) {
+  let next = state;
+  while (next.mode === "running" && next.elapsed < level.duration) {
+    next = advanceProduction(next, design, level, level.step);
+    next = enqueueWaitingOrdersByDeadline(next);
+    next = scheduleOrderLevelMaintenance(next, design, level);
+  }
+  return next;
+}
+
+function simulateLevelFifteenRecoveryBranches() {
   const level = LEVELS[15];
   const design = createPlayableChapterThreeDesign(level);
   const scenario = createOrderScenario(15, FIXED_SCENARIO_SEEDS[15]);
@@ -257,93 +266,128 @@ function simulateLevelFifteenRecovery() {
     design,
     level,
   });
-  let recovery = null;
+  const evaluatedBranchPoints = new Set();
 
   while (state.mode === "running" && state.elapsed < level.duration) {
     state = advanceProduction(state, design, level, level.step);
     state = enqueueWaitingOrdersByDeadline(state);
 
-    if (!recovery) {
+    if (!state.maintenance.activeJob && state.maintenance.queue.length === 0) {
       const highRisk = Object.entries(state.machines).find(([machineId, machine]) => {
-        if (machine.reliability?.status !== "available") return false;
+        if (machine.reliability?.status !== "available" || machine.active) return false;
         const view = getReliabilityView(machine, design.devices[machineId].type, level);
-        return view.band === "warning" && view.remainingCycles === 1;
+        return view.band === "warning";
       });
-
-      if (highRisk && !state.maintenance.activeJob) {
-        const blocker = Object.entries(state.machines)
-          .filter(([machineId, machine]) =>
-            machineId !== highRisk[0]
-              && machine.reliability?.status === "available"
-              && !machine.active)
-          .sort(([leftId, left], [rightId, right]) => {
-            const leftView = getReliabilityView(left, design.devices[leftId].type, level);
-            const rightView = getReliabilityView(right, design.devices[rightId].type, level);
-            return Number(rightView.band === "warning") - Number(leftView.band === "warning")
-              || leftId.localeCompare(rightId);
-          })[0];
-        if (blocker) {
-          state = requestMaintenance(state, blocker[0], level);
-          state = advanceProduction(state, design, level, level.step);
-          state = enqueueWaitingOrdersByDeadline(state);
-        }
-      }
-
-      const activeMachineId = state.maintenance?.activeJob?.machineId;
       const lowRisk = Object.entries(state.machines)
         .filter(([machineId, machine]) =>
           machine.reliability?.status === "available"
             && machineId !== highRisk?.[0]
-            && machineId !== activeMachineId)
-        .sort(([leftId], [rightId]) =>
-          remainingCycles(state, design, level, rightId)
-            - remainingCycles(state, design, level, leftId)
-            || leftId.localeCompare(rightId))[0];
+            && machine.active
+            && machine.remaining > 2.01)
+        .sort(([leftId, left], [rightId, right]) =>
+          right.remaining - left.remaining || leftId.localeCompare(rightId))[0];
 
-      if (highRisk && lowRisk && (state.maintenance?.activeJob?.remaining ?? 0) > 2.01
+      if (highRisk && lowRisk
         && remainingCycles(state, design, level, lowRisk[0])
           > remainingCycles(state, design, level, highRisk[0])) {
+        const branchKey = `${highRisk[0]}:${highRisk[1].reliability.wear}:${lowRisk[0]}:${lowRisk[1].active?.orderId}`;
+        if (evaluatedBranchPoints.has(branchKey)) {
+          state = scheduleOrderLevelMaintenance(state, design, level);
+          continue;
+        }
+        evaluatedBranchPoints.add(branchKey);
         const mistakenAt = state.elapsed;
-        state = requestMaintenance(state, lowRisk[0], level);
-        state = requestMaintenance(state, highRisk[0], level);
-        assert.ok(
-          state.maintenance.queue.findIndex((job) => job.machineId === lowRisk[0])
-            < state.maintenance.queue.findIndex((job) => job.machineId === highRisk[0]),
-        );
+        let mistakenState = requestMaintenance(state, lowRisk[0], level);
+        mistakenState = requestMaintenance(mistakenState, highRisk[0], level);
+        const mistakenQueue = mistakenState.maintenance.queue.map((job) => job.machineId);
 
-        state = advanceProduction(state, design, level, 2);
-        state = enqueueWaitingOrdersByDeadline(state);
-        state = orderMaintenanceQueueByRisk(state, design, level);
-        assert.ok(
-          state.maintenance.queue.findIndex((job) => job.machineId === highRisk[0])
-            < state.maintenance.queue.findIndex((job) => job.machineId === lowRisk[0]),
-        );
-        recovery = {
-          mistakenAt,
-          correctedAt: state.elapsed,
-          lowRiskMachineId: lowRisk[0],
-          highRiskMachineId: highRisk[0],
+        let immediate = moveMaintenanceRequest(structuredClone(mistakenState), highRisk[0], 0);
+        let delayed = advanceProduction(structuredClone(mistakenState), design, level, 2);
+        const delayedCrewAfterTwoSeconds = delayed.maintenance.activeJob;
+        const delayedQueueAfterTwoSeconds = delayed.maintenance.queue.map((job) => job.machineId);
+        delayed = moveMaintenanceRequest(delayed, highRisk[0], 0);
+        const correctedQueue = delayed.maintenance.queue.map((job) => job.machineId);
+
+        immediate = advanceProduction(immediate, design, level, 2);
+        const immediateCrewAfterTwoSeconds = immediate.maintenance.activeJob;
+        immediate = enqueueWaitingOrdersByDeadline(immediate);
+        delayed = enqueueWaitingOrdersByDeadline(delayed);
+
+        const immediateFinished = finishLevelFifteenAttempt(immediate, design, level);
+        const delayedFinished = finishLevelFifteenAttempt(delayed, design, level);
+        if (immediateFinished.mode === "success"
+          && delayedFinished.mode === "success"
+          && delayedFinished.elapsed > immediateFinished.elapsed) return {
+          scenario,
+          immediate: immediateFinished,
+          delayed: delayedFinished,
+          evidence: {
+            mistakenAt,
+            correctedAt: delayed.elapsed,
+            lowRiskMachineId: lowRisk[0],
+            highRiskMachineId: highRisk[0],
+            lowRiskRemainingAtMistake: lowRisk[1].remaining,
+            lowRiskCyclesAtMistake: remainingCycles(state, design, level, lowRisk[0]),
+            highRiskCyclesAtMistake: remainingCycles(state, design, level, highRisk[0]),
+            highRiskReadyForMaintenanceAtMistake: !highRisk[1].active,
+            crewIdleAtMistake: state.maintenance.activeJob === null,
+            mistakenQueue,
+            delayedCrewAfterTwoSeconds,
+            delayedQueueAfterTwoSeconds,
+            lowRiskStillActiveAfterTwoSeconds: Boolean(delayed.machines[lowRisk[0]].active),
+            correctedQueue,
+            immediateCrewAfterTwoSeconds,
+          },
         };
       }
     }
 
     state = scheduleOrderLevelMaintenance(state, design, level);
   }
-  return { scenario, state, recovery };
+  throw new Error("The fixed scenario never reached a legal FIFO recovery branch point.");
 }
 
-test("level fifteen recovers after a lower-risk maintenance job stays ahead for two seconds", () => {
-  const { scenario, state, recovery } = simulateLevelFifteenRecovery();
-  assert.ok(recovery, "the fixed scenario must exercise the intentional maintenance-order mistake");
-  assert.equal(recovery.correctedAt - recovery.mistakenAt, 2);
-  assert.equal(state.mode, "success", JSON.stringify({ failure: state.failure, recovery }));
-  assert.equal(state.completed, scenario.orders.length);
-  assert.equal(state.elapsed, 73.03);
-  assert.deepEqual(recovery, {
-    mistakenAt: 40.51,
-    correctedAt: 42.51,
-    lowRiskMachineId: "cutter-1",
-    highRiskMachineId: "drill",
+test("level fifteen survives two seconds of real FIFO crew idling before the player corrects the queue", () => {
+  const { scenario, immediate, delayed, evidence } = simulateLevelFifteenRecoveryBranches();
+
+  assert.equal(evidence.correctedAt - evidence.mistakenAt, 2);
+  assert.equal(evidence.crewIdleAtMistake, true);
+  assert.ok(evidence.lowRiskRemainingAtMistake > 2);
+  assert.ok(evidence.lowRiskCyclesAtMistake > evidence.highRiskCyclesAtMistake);
+  assert.equal(evidence.highRiskReadyForMaintenanceAtMistake, true);
+  assert.deepEqual(evidence.mistakenQueue, [evidence.lowRiskMachineId, evidence.highRiskMachineId]);
+  assert.equal(evidence.delayedCrewAfterTwoSeconds, null);
+  assert.deepEqual(evidence.delayedQueueAfterTwoSeconds, evidence.mistakenQueue);
+  assert.equal(evidence.lowRiskStillActiveAfterTwoSeconds, true);
+  assert.deepEqual(evidence.correctedQueue, [evidence.highRiskMachineId, evidence.lowRiskMachineId]);
+  assert.equal(evidence.immediateCrewAfterTwoSeconds?.machineId, evidence.highRiskMachineId);
+  assert.equal(immediate.mode, "success", JSON.stringify(immediate.failure));
+  assert.equal(delayed.mode, "success", JSON.stringify(delayed.failure));
+  assert.equal(immediate.completed, scenario.orders.length);
+  assert.equal(delayed.completed, scenario.orders.length);
+  assert.ok(delayed.elapsed > immediate.elapsed);
+  assert.deepEqual({
+    immediateElapsed: immediate.elapsed,
+    delayedElapsed: delayed.elapsed,
+    completionLoss: Number((delayed.elapsed - immediate.elapsed).toFixed(2)),
+    evidence: {
+      mistakenAt: evidence.mistakenAt,
+      correctedAt: evidence.correctedAt,
+      lowRiskMachineId: evidence.lowRiskMachineId,
+      highRiskMachineId: evidence.highRiskMachineId,
+      lowRiskRemainingAtMistake: evidence.lowRiskRemainingAtMistake,
+    },
+  }, {
+    immediateElapsed: 67,
+    delayedElapsed: 68.05,
+    completionLoss: 1.05,
+    evidence: {
+      mistakenAt: 37.5,
+      correctedAt: 39.5,
+      lowRiskMachineId: "lathe-2",
+      highRiskMachineId: "lathe-1",
+      lowRiskRemainingAtMistake: 3,
+    },
   });
 });
 

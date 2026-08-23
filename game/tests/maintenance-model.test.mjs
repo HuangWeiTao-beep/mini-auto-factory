@@ -65,6 +65,15 @@ test("request, cancel, and move preserve immutable state boundaries", () => {
   assert.deepEqual(cancelled.maintenance.queue.map((job) => job.machineId), ["lathe"]);
 });
 
+test("request rejects machines without an existing reliability record", () => {
+  const state = runtimeWithMachines(["lathe"]);
+  delete state.machines.lathe.reliability;
+  const result = requestMaintenance(state, "lathe", level);
+  assert.strictEqual(result, state);
+  assert.equal(state.machines.lathe.reliability, undefined);
+  assert.deepEqual(state.maintenance.queue, []);
+});
+
 test("one crew preserves queue order and planned maintenance wins at 100 percent", () => {
   const state = runtimeWithMachines(["lathe", "drill"]);
   state.machines.lathe.active = "blank";

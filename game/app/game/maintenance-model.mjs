@@ -41,7 +41,7 @@ function cloneRuntimeState(state) {
 export function requestMaintenance(state, machineId, level) {
   const machine = state?.machines?.[machineId];
   const config = level?.maintenance;
-  if (!machine || !config || (machine.reliability && machine.reliability.status !== "available")) return state;
+  if (!machine || !config || machine.reliability?.status !== "available") return state;
   const maintenance = state.maintenance ?? createMaintenanceState();
   if (maintenance.activeJob?.machineId === machineId || maintenance.queue.some((job) => job.machineId === machineId)) return state;
   const next = cloneRuntimeState(state);

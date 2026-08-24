@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LEVELS, advanceProduction, pauseProduction } from "./factory-model.mjs";
+import { DEVICE_TYPES, LEVELS, advanceProduction, pauseProduction } from "./factory-model.mjs";
 import type { FactoryDesign } from "./factory-model.mjs";
 import {
   applyProductionState,
+  cancelSessionMaintenance,
   clearGameSession,
   enqueueSessionOrder,
   moveSessionQueuedOrder,
+  moveSessionMaintenance,
+  prioritizeSessionMaintenance,
   prioritizeSessionOrder,
+  requestSessionMaintenance,
   resetGameSession,
   restoreGameSession,
   saveGameSession,
@@ -32,18 +36,20 @@ export function useGameSession(options: {
   const { onRestored } = options;
   const [initialSession] = useState(() => createSession(restoreGameSession(emptyStorage)));
   const [session, setSession] = useState(initialSession);
+  const [maintenanceAlert, setMaintenanceAlert] = useState<{ message: string; at: number } | null>(null);
   const [hasRestoredSession, setHasRestoredSession] = useState(false);
   const frameRef = useRef<number | null>(null);
   const previousTime = useRef<number | null>(null);
   const sessionRef = useRef(session);
   const onRestoredRef = useRef(onRestored);
+  const notifiedMaintenanceEvents = useRef(new Set<string>());
   const level = LEVELS[session.activeLevelId];
   const {
     activeLevelId: persistedActiveLevelId,
     unlockedLevel: persistedUnlockedLevel,
     bestResults: persistedBestResults,
     drafts: persistedDrafts,
-    chapterTwoSeeds: persistedChapterTwoSeeds,
+    orderScenarioSeeds: persistedOrderScenarioSeeds,
     design: persistedDesign,
   } = session;
   const persistedStateMode = session.state.mode;
@@ -77,7 +83,7 @@ export function useGameSession(options: {
       unlockedLevel: persistedUnlockedLevel,
       bestResults: persistedBestResults,
       drafts: persistedDrafts,
-      chapterTwoSeeds: persistedChapterTwoSeeds,
+      orderScenarioSeeds: persistedOrderScenarioSeeds,
       design: persistedDesign,
       state: { mode: persistedStateMode },
     }),
@@ -86,7 +92,7 @@ export function useGameSession(options: {
       persistedUnlockedLevel,
       persistedBestResults,
       persistedDrafts,
-      persistedChapterTwoSeeds,
+      persistedOrderScenarioSeeds,
       persistedDesign,
       persistedStateMode,
     ],
@@ -110,6 +116,35 @@ export function useGameSession(options: {
       const current = sessionRef.current;
       const currentLevel = LEVELS[current.activeLevelId];
       const nextState = advanceProduction(current.state, current.design, currentLevel, delta);
+      let nextMaintenanceMessage: string | null = null;
+      for (const [machineId, machine] of Object.entries(nextState.machines)) {
+        const previousMachine = current.state.machines[machineId];
+        const previousWear = previousMachine?.reliability?.wear ?? 0;
+        const wear = machine.reliability?.wear ?? 0;
+        const label = current.design.devices[machineId]
+          ? DEVICE_TYPES[current.design.devices[machineId].type].label
+          : machineId;
+        const warningKey = `${machineId}:60`;
+        const dangerKey = `${machineId}:85`;
+        const breakdownKey = `${machineId}:broken`;
+        if (previousWear < 60 && wear >= 60 && !notifiedMaintenanceEvents.current.has(warningKey)) {
+          notifiedMaintenanceEvents.current.add(warningKey);
+          nextMaintenanceMessage = `${label}磨损达到 60%，建议尽快安排计划维护。`;
+        }
+        if (previousWear < 85 && wear >= 85 && !notifiedMaintenanceEvents.current.has(dangerKey)) {
+          notifiedMaintenanceEvents.current.add(dangerKey);
+          nextMaintenanceMessage = `${label}进入高危状态，加工时间已增加 20%。`;
+        }
+        if (machine.reliability?.status === "broken"
+          && previousMachine?.reliability?.status !== "broken"
+          && !notifiedMaintenanceEvents.current.has(breakdownKey)) {
+          notifiedMaintenanceEvents.current.add(breakdownKey);
+          nextMaintenanceMessage = `${label}发生故障，已加入故障抢修队列。`;
+        }
+      }
+      if (nextMaintenanceMessage) {
+        setMaintenanceAlert({ message: nextMaintenanceMessage, at: nextState.elapsed });
+      }
       const next = applyProductionState(current, nextState, currentLevel);
       sessionRef.current = next;
       setSession(next);
@@ -130,6 +165,10 @@ export function useGameSession(options: {
 
   const start = useCallback(() => {
     const next = startGameSession(session, level);
+    if (session.editedWhilePaused) {
+      notifiedMaintenanceEvents.current.clear();
+      setMaintenanceAlert(null);
+    }
     sessionRef.current = next;
     setSession(next);
   }, [level, session]);
@@ -142,6 +181,8 @@ export function useGameSession(options: {
 
   const reset = useCallback((keepDesign: boolean) => {
     const next = resetGameSession(session, keepDesign);
+    notifiedMaintenanceEvents.current.clear();
+    setMaintenanceAlert(null);
     sessionRef.current = next;
     setSession(next);
   }, [session]);
@@ -185,9 +226,61 @@ export function useGameSession(options: {
     return true;
   }, []);
 
+  const requestMaintenance = useCallback((machineId: string) => {
+    const current = sessionRef.current;
+    const next = requestSessionMaintenance(current, machineId);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
+  const cancelMaintenance = useCallback((machineId: string) => {
+    const current = sessionRef.current;
+    const next = cancelSessionMaintenance(current, machineId);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
+  const moveMaintenance = useCallback((machineId: string, offset: number) => {
+    const current = sessionRef.current;
+    const currentIndex = current.state.maintenance?.queue.findIndex(
+      (job) => job.machineId === machineId,
+    ) ?? -1;
+    if (currentIndex < 0) return false;
+    const next = moveSessionMaintenance(current, machineId, currentIndex + offset);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
+  const moveMaintenanceUp = useCallback(
+    (machineId: string) => moveMaintenance(machineId, -1),
+    [moveMaintenance],
+  );
+
+  const moveMaintenanceDown = useCallback(
+    (machineId: string) => moveMaintenance(machineId, 1),
+    [moveMaintenance],
+  );
+
+  const prioritizeMaintenance = useCallback((machineId: string) => {
+    const current = sessionRef.current;
+    const next = prioritizeSessionMaintenance(current, machineId);
+    if (next === current) return false;
+    sessionRef.current = next;
+    setSession(next);
+    return true;
+  }, []);
+
   const selectLevel = useCallback((levelId: number) => {
     const selected = selectGameLevel(undefined, session, levelId);
     if (!selected.accepted) return false;
+    notifiedMaintenanceEvents.current.clear();
+    setMaintenanceAlert(null);
     sessionRef.current = selected.session;
     setSession(selected.session);
     return true;
@@ -195,6 +288,8 @@ export function useGameSession(options: {
 
   const clearProgress = useCallback(() => {
     const cleared = createSession(clearGameSession(undefined));
+    notifiedMaintenanceEvents.current.clear();
+    setMaintenanceAlert(null);
     sessionRef.current = cleared;
     setSession(cleared);
   }, []);
@@ -203,6 +298,7 @@ export function useGameSession(options: {
     ...session,
     level,
     hasRestoredSession,
+    maintenanceAlert,
     mutateDesign,
     start,
     pause,
@@ -211,6 +307,11 @@ export function useGameSession(options: {
     moveOrderUp,
     moveOrderDown,
     prioritizeOrder,
+    requestMaintenance,
+    cancelMaintenance,
+    moveMaintenanceUp,
+    moveMaintenanceDown,
+    prioritizeMaintenance,
     selectLevel,
     clearProgress,
   };

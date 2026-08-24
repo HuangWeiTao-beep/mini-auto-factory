@@ -12,6 +12,7 @@ import {
   getDeviceLimit,
   getAllowedPaletteTypes,
   getLevelConfig,
+  getLatheOutputLabel,
   isOrderSchedulingLevel,
   LEVELS,
   moveDevice,
@@ -21,6 +22,12 @@ import {
   removeConnection,
   startProduction,
 } from "../app/game/factory-model.mjs";
+
+test("lathe descriptions follow fixed-level drill output without mislabelling order recipes", () => {
+  assert.equal(getLatheOutputLabel(LEVELS[11]), "螺栓");
+  assert.equal(getLatheOutputLabel(LEVELS[12]), "未钻孔螺栓");
+  assert.equal(getLatheOutputLabel(LEVELS[13]), "螺栓");
+});
 
 function createDesign(types) {
   let design = createEmptyDesign();
@@ -302,11 +309,12 @@ test("level five exposes the workshop acceptance display name", () => {
   assert.equal(getLevelConfig(5).duration, 36);
 });
 
-test("success unlocks the next level while completing level five keeps the chapter capped", () => {
+test("success unlocks the next level and caps progression at the final level", () => {
   assert.equal(nextUnlockedLevel(1, 1), 2);
   assert.equal(nextUnlockedLevel(5, 5), 6);
   assert.equal(nextUnlockedLevel(9, 9), 10);
-  assert.equal(nextUnlockedLevel(10, 10), 10);
+  assert.equal(nextUnlockedLevel(10, 10), 11);
+  assert.equal(nextUnlockedLevel(15, 15), 15);
 });
 
 test("chapter-two helpers expose the new order-scheduling machine palette", () => {

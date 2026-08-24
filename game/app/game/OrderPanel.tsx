@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { OrderFailure, ProductId, ProductionOrder } from "./factory-model.mjs";
 import type { SchedulingFeedback, SchedulingOrderFeedback } from "./scheduling-feedback.mjs";
 
@@ -18,6 +19,7 @@ const productDetails: Record<ProductId, { label: string; route: string; icon: st
   standard: { label: "普通螺栓", route: "钢棒源 → 切割 → 车削 → 出口", icon: "◆" },
   precision: { label: "精密螺栓", route: "钢棒源 → 切割 → 车削 → 钻孔 → 出口", icon: "◎" },
   rustproof: { label: "防锈螺栓", route: "钢棒源 → 切割 → 车削 → 镀层 → 出口", icon: "◌" },
+  hardened: { label: "强化螺栓", route: "钢棒源 → 切割 → 车削 → 热处理 → 出口", icon: "♨" },
 };
 
 function remainingSeconds(order: ProductionOrder, elapsed: number) {
@@ -90,6 +92,7 @@ export function OrderPanel({
   onMoveDown,
   onPrioritize,
 }: Props) {
+  const [scheduledExpanded, setScheduledExpanded] = useState(false);
   const byId = new Map(orders.map((order) => [order.id, order]));
   const feedbackById = new Map(feedback?.orders.map((entry) => [entry.id, entry]));
   const riskRank = (order: ProductionOrder) => {
@@ -109,7 +112,7 @@ export function OrderPanel({
   const scheduledCount = scheduled.length;
 
   return (
-    <aside className="order-panel" aria-label="订单调度面板">
+    <section className="order-panel" aria-label="订单调度面板">
       <div className="panel-heading order-panel__heading">
         <span>订单看板</span><small>{scheduledCount > 0 ? `${scheduledCount} 单尚未到达` : "全部订单已到达"}</small>
       </div>
@@ -146,13 +149,28 @@ export function OrderPanel({
       )}
 
       <section className="order-section" aria-labelledby="order-scheduled-title">
-        <h2 id="order-scheduled-title">即将到达 <span>{scheduled.length}</span></h2>
-        <div className="order-stack">
-          {scheduled.length === 0 && <p className="order-empty">没有待到达订单</p>}
-          {scheduled.map((order) => (
-            <OrderSummary key={order.id} order={order} elapsed={elapsed} feedback={feedbackById.get(order.id)} testId={`order-scheduled-${order.id}`} className="order-card--scheduled" />
-          ))}
+        <div className="order-section__heading">
+          <h2 id="order-scheduled-title">即将到达 <span>{scheduled.length}</span></h2>
+          <button
+            type="button"
+            className="order-section__toggle"
+            data-testid="toggle-scheduled-orders"
+            aria-expanded={scheduledExpanded}
+            aria-controls="order-scheduled-list"
+            onClick={() => setScheduledExpanded((expanded) => !expanded)}
+          >
+            {scheduledExpanded ? "收起" : "展开"}
+            <span aria-hidden="true">{scheduledExpanded ? "−" : "+"}</span>
+          </button>
         </div>
+        {scheduledExpanded && (
+          <div id="order-scheduled-list" className="order-stack">
+            {scheduled.length === 0 && <p className="order-empty">没有待到达订单</p>}
+            {scheduled.map((order) => (
+              <OrderSummary key={order.id} order={order} elapsed={elapsed} feedback={feedbackById.get(order.id)} testId={`order-scheduled-${order.id}`} className="order-card--scheduled" />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="order-section" aria-labelledby="order-waiting-title">
@@ -217,6 +235,6 @@ export function OrderPanel({
         <h2 id="order-completed-title">已完成 <span data-testid="order-completed-count">{completed.length}/{orders.length}</span></h2>
         <p>{completed.length === 0 ? "验收台还空着。" : completed.map((order) => order.id).join(" · ")}</p>
       </section>
-    </aside>
+    </section>
   );
 }

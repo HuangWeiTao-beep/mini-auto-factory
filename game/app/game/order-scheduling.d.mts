@@ -1,10 +1,11 @@
-export type ProductId = "standard" | "precision" | "rustproof";
+export type ProductId = "standard" | "precision" | "rustproof" | "hardened";
 export type PaletteType =
   | "source"
   | "cutter"
   | "lathe"
   | "drill"
   | "coater"
+  | "heatTreater"
   | "exit";
 export type OrderStatus = "scheduled" | "waiting" | "queued";
 

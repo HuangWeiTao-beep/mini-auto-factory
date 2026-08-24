@@ -11,12 +11,13 @@ type Props = {
 const levelIds = Object.keys(LEVELS).map(Number).sort((a, b) => a - b);
 const chapters = [
   { id: 1, title: "第一章：产线基础", levelIds: levelIds.filter((levelId) => levelId <= 5) },
-  { id: 2, title: "第二章：订单调度", levelIds: levelIds.filter((levelId) => levelId >= 6) },
+  { id: 2, title: "第二章：订单调度", levelIds: levelIds.filter((levelId) => levelId >= 6 && levelId <= 10) },
+  { id: 3, title: "第三章：设备可靠性", levelIds: levelIds.filter((levelId) => levelId >= 11 && levelId <= 15) },
 ] as const;
 
 function levelDetail(levelId: number) {
   const level = LEVELS[levelId];
-  if (level.chapter === 2 && level.orderConfig) {
+  if (level.orderConfig) {
     const [minimumLead, maximumLead] = level.orderConfig.deadlineLeadWindow;
     return `${level.orderConfig.orderCount} 张订单 · 交付窗口 ${minimumLead}–${maximumLead} 秒`;
   }
@@ -36,7 +37,7 @@ export function LevelSelectModal({
         <button className="level-select-close" type="button" aria-label="关闭关卡选择" onClick={onClose} autoFocus>×</button>
         <span className="level-select-kicker">CHAPTER MAP</span>
         <h2 id="level-select-title">章节关卡</h2>
-        <p>前五关学会造东西，后五关学会别让订单把你造了。</p>
+        <p>十五关，三门课：搭产线、排订单，以及别把机器用到冒烟。</p>
         <div className="level-select-chapters">
           {chapters.map((chapter) => (
             <section key={chapter.id} className="level-select-chapter" aria-labelledby={`chapter-${chapter.id}-title`}>

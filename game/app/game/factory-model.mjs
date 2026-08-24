@@ -14,6 +14,17 @@ import {
   enqueueWaitingOrder,
   moveQueuedOrder,
 } from "./order-scheduling.mjs";
+import {
+  advanceMaintenance,
+  applyCompletedMachineCycle,
+  canMachineAcceptMaterial,
+  createMachineReliability,
+  createMaintenanceState,
+  getReliabilityView,
+  getProcessingDuration,
+  moveMaintenanceRequest,
+  requestMaintenance,
+} from "./maintenance-model.mjs";
 
 const createDeviceSpec = (label, accepts, produces, duration, icon, eyebrow) =>
   Object.freeze({
@@ -35,10 +46,11 @@ export const DEVICE_TYPES = Object.freeze({
   lathe: createDeviceSpec("车削机", "blank", "bolt", 3, "⚙", "LATHE 03"),
   drill: createDeviceSpec("钻孔机", "undrilledBolt", "bolt", 2, "◉", "DRILL 04"),
   coater: createDeviceSpec("镀层机", "bolt", "coatedBolt", 2, "◌", "COATER 05"),
+  heatTreater: createDeviceSpec("热处理炉", "bolt", "hardenedBolt", 3, "♨", "HEAT 06"),
   exit: createDeviceSpec("成品出口", "bolt", null, 0, "✓", "EXIT 99"),
 });
 
-export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill", "coater"]);
+export const PROCESSING_TYPES = new Set(["cutter", "lathe", "drill", "coater", "heatTreater"]);
 
 export const MATERIALS = Object.freeze({
   rod: { label: "长钢棒", shortLabel: "钢棒" },
@@ -46,6 +58,7 @@ export const MATERIALS = Object.freeze({
   bolt: { label: "螺栓", shortLabel: "螺栓" },
   undrilledBolt: { label: "未钻孔螺栓", shortLabel: "未钻孔" },
   coatedBolt: { label: "防锈螺栓", shortLabel: "防锈" },
+  hardenedBolt: { label: "强化螺栓", shortLabel: "强化" },
 });
 
 const DEFAULT_CONNECTION_RULES = Object.freeze({
@@ -74,6 +87,15 @@ const freezeLevel = (level) =>
             ...level.orderConfig.deadlineLeadWindow,
           ]),
           productPool: Object.freeze([...level.orderConfig.productPool]),
+        })
+      : null,
+    maintenance: level.maintenance
+      ? Object.freeze({
+          ...level.maintenance,
+          wearPerCycle: Object.freeze({ ...level.maintenance.wearPerCycle }),
+          objective: level.maintenance.objective
+            ? Object.freeze({ ...level.maintenance.objective })
+            : null,
         })
       : null,
   });
@@ -308,6 +330,149 @@ export const LEVELS = Object.freeze({
     orderConfig: ORDER_SCENARIO_RULES[10],
     step: 0.01,
   }),
+  11: freezeLevel({
+    id: 11,
+    chapter: 3,
+    mode: "production",
+    name: "预防维护",
+    routeHint: "预警不是装饰；在车削机故障前安排计划维护。",
+    duration: 58,
+    target: 10,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 0, coater: 0, heatTreater: 0, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3 },
+    obstacles: [],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ["source", "cutter", "lathe", "exit"],
+    orderConfig: null,
+    maintenance: {
+      plannedDuration: 4,
+      repairDuration: 7,
+      slowdownThreshold: 85,
+      failureThreshold: 100,
+      wearPerCycle: { cutter: 8, lathe: 18 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
+    },
+    step: 0.01,
+  }),
+  12: freezeLevel({
+    id: 12,
+    chapter: 3,
+    mode: "production",
+    name: "维修冲突",
+    routeHint: "多台设备同时预警时，维修队的顺序就是产能。",
+    duration: 68,
+    target: 10,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, coater: 0, heatTreater: 0, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2 },
+    obstacles: [],
+    connectionRules: DEFAULT_CONNECTION_RULES,
+    paletteTypes: ["source", "cutter", "lathe", "drill", "exit"],
+    orderConfig: null,
+    maintenance: {
+      plannedDuration: 4,
+      repairDuration: 7,
+      slowdownThreshold: 85,
+      failureThreshold: 100,
+      wearPerCycle: { cutter: 10, lathe: 14, drill: 18 },
+      objective: { plannedCompletions: 2, queueReorders: 1 },
+    },
+    step: 0.01,
+  }),
+  13: freezeLevel({
+    id: 13,
+    chapter: 3,
+    mode: "orderScheduling",
+    name: "热处理试产",
+    routeHint: "强化螺栓必须经过热处理炉；它也最会磨洋工。",
+    duration: 64,
+    target: ORDER_SCENARIO_RULES[13].orderCount,
+    deviceLimits: { source: 1, cutter: 1, lathe: 1, drill: 1, coater: 0, heatTreater: 1, exit: 1 },
+    transportMode: "fixed",
+    transportDuration: 0.5,
+    sourceInterval: 3,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2, heatTreater: 3 },
+    obstacles: [],
+    connectionRules: {
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[13].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[13],
+    maintenance: {
+      plannedDuration: 4,
+      repairDuration: 7,
+      slowdownThreshold: 85,
+      failureThreshold: 100,
+      wearPerCycle: { cutter: 13, lathe: 15, drill: 25, heatTreater: 40 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
+    },
+    step: 0.01,
+  }),
+  14: freezeLevel({
+    id: 14,
+    chapter: 3,
+    mode: "orderScheduling",
+    name: "四线协同",
+    routeHint: "四种产品一起抢设备，维修优先级得比直觉更靠谱。",
+    duration: 78,
+    target: ORDER_SCENARIO_RULES[14].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 1, heatTreater: 1, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 2,
+    machineDurations: { cutter: 2, lathe: 3, drill: 2, coater: 2, heatTreater: 3 },
+    obstacles: [],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[14].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[14],
+    maintenance: {
+      plannedDuration: 4,
+      repairDuration: 7,
+      slowdownThreshold: 85,
+      failureThreshold: 100,
+      wearPerCycle: { cutter: 12, lathe: 14, drill: 24, coater: 28, heatTreater: 38 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
+    },
+    step: 0.01,
+  }),
+  15: freezeLevel({
+    id: 15,
+    chapter: 3,
+    mode: "orderScheduling",
+    name: "可靠性审计",
+    routeHint: "订单、磨损和停机窗口都来凑热闹；别让维修队排成行为艺术。",
+    duration: 92,
+    target: ORDER_SCENARIO_RULES[15].orderCount,
+    deviceLimits: { source: 1, cutter: 2, lathe: 2, drill: 1, coater: 1, heatTreater: 1, exit: 1 },
+    transportMode: "distance",
+    transportDuration: 0.5,
+    sourceInterval: 1,
+    machineDurations: { cutter: 1, lathe: 3, drill: 2, coater: 2, heatTreater: 3 },
+    obstacles: [],
+    connectionRules: {
+      allowsParallelInputs: true,
+      allowsParallelOutputs: true,
+    },
+    paletteTypes: ORDER_SCENARIO_RULES[15].paletteTypes,
+    orderConfig: ORDER_SCENARIO_RULES[15],
+    maintenance: {
+      plannedDuration: 4,
+      repairDuration: 7,
+      slowdownThreshold: 85,
+      failureThreshold: 100,
+      wearPerCycle: { cutter: 13, lathe: 15, drill: 25, coater: 30, heatTreater: 40 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
+    },
+    step: 0.01,
+  }),
 });
 
 export const LEVEL_CONFIG = LEVELS[1];
@@ -322,6 +487,17 @@ export function isOrderSchedulingLevel(levelOrId) {
     return LEVELS[levelOrId]?.mode === "orderScheduling";
   }
   return levelOrId?.mode === "orderScheduling";
+}
+
+export function isMaintenanceLevel(levelOrId) {
+  if (typeof levelOrId === "number") return LEVELS[levelOrId]?.maintenance != null;
+  return levelOrId?.maintenance != null;
+}
+
+export function getLatheOutputLabel(level) {
+  return !isOrderSchedulingLevel(level) && (level.deviceLimits?.drill ?? 0) > 0
+    ? "未钻孔螺栓"
+    : "螺栓";
 }
 
 export function getAllowedPaletteTypes(level) {
@@ -451,6 +627,9 @@ export function createProductionState(design, level, scenario) {
         waiting: null,
         output: null,
         warning: null,
+        ...(isMaintenanceLevel(level)
+          ? { totalDuration: 0, reliability: createMachineReliability() }
+          : {}),
       };
     }
   }
@@ -471,6 +650,7 @@ export function createProductionState(design, level, scenario) {
     ),
     lines,
     warning: null,
+    ...(isMaintenanceLevel(level) ? { maintenance: createMaintenanceState() } : {}),
   };
   if (!isOrderSchedulingLevel(level)) return baseState;
 
@@ -523,15 +703,16 @@ const SCENARIO_VALIDATION_POSITIONS = Object.freeze({
   "drill-1": [11, 2],
   "drill-2": [16, 6],
   "coater-1": [11, 10],
+  "heatTreater-1": [16, 10],
 });
 
 const MAX_RANDOM_SCENARIO_ATTEMPTS = 64;
 const MAX_SAFE_SCENARIO_ATTEMPTS = 16;
 const scenarioCache = new Map();
 
-function createScenarioValidationDesign(level) {
+export function createScenarioValidationDesign(level) {
   let design = createEmptyDesign();
-  const machineIds = { cutter: [], lathe: [], drill: [], coater: [] };
+  const machineIds = { cutter: [], lathe: [], drill: [], coater: [], heatTreater: [] };
   for (const [id, type] of [["source", "source"], ["exit", "exit"]]) {
     const [gridX, gridY] = SCENARIO_VALIDATION_POSITIONS[id];
     design = addDevice(design, type, gridX * GRID.cellSize, gridY * GRID.cellSize, id);
@@ -569,12 +750,18 @@ function createScenarioValidationDesign(level) {
     for (const coaterId of machineIds.coater) {
       design = connectDevices(design, latheId, coaterId, level);
     }
+    for (const heatTreaterId of machineIds.heatTreater) {
+      design = connectDevices(design, latheId, heatTreaterId, level);
+    }
   }
   for (const drillId of machineIds.drill) {
     design = connectDevices(design, drillId, "exit", level);
   }
   for (const coaterId of machineIds.coater) {
     design = connectDevices(design, coaterId, "exit", level);
+  }
+  for (const heatTreaterId of machineIds.heatTreater) {
+    design = connectDevices(design, heatTreaterId, "exit", level);
   }
   return design;
 }
@@ -596,6 +783,39 @@ function enqueueScenarioOrdersByDeadline(state) {
   return { ...next, queue: [...next.queue] };
 }
 
+function scheduleScenarioMaintenance(state, design, level) {
+  let next = state;
+  for (const [machineId, machine] of Object.entries(next.machines)) {
+    if (machine.reliability?.status !== "available") continue;
+    const view = getReliabilityView(
+      machine,
+      design.devices[machineId]?.type,
+      level,
+    );
+    if (view.band === "warning" && view.remainingCycles <= 1) {
+      next = requestMaintenance(next, machineId, level);
+    }
+  }
+
+  const orderedJobs = [...(next.maintenance?.queue ?? [])].sort((left, right) => {
+    const leftRemaining = getReliabilityView(
+      next.machines[left.machineId],
+      design.devices[left.machineId]?.type,
+      level,
+    ).remainingCycles;
+    const rightRemaining = getReliabilityView(
+      next.machines[right.machineId],
+      design.devices[right.machineId]?.type,
+      level,
+    ).remainingCycles;
+    return leftRemaining - rightRemaining || left.machineId.localeCompare(right.machineId);
+  });
+  for (const [index, job] of orderedJobs.entries()) {
+    next = moveMaintenanceRequest(next, job.machineId, index);
+  }
+  return next;
+}
+
 function scenarioCompletesWithSupportedSchedule(level, scenario) {
   const design = createScenarioValidationDesign(level);
   let state = createProductionState(design, level, scenario);
@@ -603,6 +823,7 @@ function scenarioCompletesWithSupportedSchedule(level, scenario) {
   while (state.mode === "running" && state.elapsed < level.duration) {
     tickOrderScheduling(state, design, level, level.step);
     state = enqueueScenarioOrdersByDeadline(state);
+    state = scheduleScenarioMaintenance(state, design, level);
   }
   return state.mode === "success" && state.completed === scenario.orders.length;
 }
@@ -652,6 +873,7 @@ export function startProduction(state, options = {}) {
     if (!Array.isArray(state.orders)) {
       return createProductionState(
         options.design ?? { devices: {}, connections: [] },
+        options.level,
       );
     }
     if (["success", "failure"].includes(state.mode)) return state;
@@ -673,6 +895,7 @@ export function startProduction(state, options = {}) {
     return {
       ...createProductionState(
         options.design ?? { devices: {}, connections: [] },
+        options.level,
       ),
       mode: "running",
     };
@@ -710,6 +933,39 @@ function selectOutgoingLine(state, design, deviceId, material = null) {
   return line && !line.item ? connection : null;
 }
 
+function beginMachineWork(machine, material, deviceType, level) {
+  if (!canMachineAcceptMaterial(machine) || machine.active || machine.output) return false;
+  machine.active = material;
+  const duration = getProcessingDuration(
+    machine,
+    level.machineDurations[deviceType] ?? DEVICE_TYPES[deviceType].duration,
+    level,
+  );
+  machine.remaining = duration;
+  if (machine.reliability) machine.totalDuration = duration;
+  machine.status = "working";
+  return true;
+}
+
+function maintenanceObjectiveSatisfied(state, level) {
+  const objective = level.maintenance?.objective;
+  if (!objective) return true;
+  return (state.maintenance?.plannedCompleted ?? 0) >= objective.plannedCompletions
+    && (state.maintenance?.queueReorders ?? 0) >= objective.queueReorders;
+}
+
+function productionTargetSatisfied(state, level) {
+  return isOrderSchedulingLevel(level)
+    ? state.orders?.length > 0 && state.orders.every((order) => order.status === "completed")
+    : state.completed >= level.target;
+}
+
+function settleSuccessfulProduction(state, level) {
+  if (productionTargetSatisfied(state, level) && maintenanceObjectiveSatisfied(state, level)) {
+    state.mode = "success";
+  }
+}
+
 function deliverToTarget(state, design, level, line) {
   const item = line.item;
   const device = design.devices[line.to];
@@ -741,19 +997,20 @@ function deliverToTarget(state, design, level, line) {
   }
 
   if (device.type === "exit") {
-    state.completed += 1;
+    state.completed = Math.min(level.target, state.completed + 1);
     line.item = null;
-    if (state.completed >= level.target) state.mode = "success";
+    settleSuccessfulProduction(state, level);
     return true;
   }
 
   const machine = state.machines[device.id];
-  if (!machine.active && !machine.output) {
-    machine.active = item.kind;
-    machine.remaining = level.machineDurations[device.type];
-    machine.status = "working";
+  if (beginMachineWork(machine, item.kind, device.type, level)) {
     line.item = null;
     return true;
+  }
+  if (!canMachineAcceptMaterial(machine)) {
+    item.status = "waiting";
+    return false;
   }
   if (!machine.waiting) {
     machine.waiting = item.kind;
@@ -785,8 +1042,11 @@ function trySend(state, design, level, deviceId, material, clearOutput) {
   return true;
 }
 
-function outputFor(level, type) {
-  return type === "lathe" && level.id >= 2
+function outputFor(level, design, type) {
+  const requiresDrilling =
+    (level.deviceLimits.drill ?? 0) > 0 ||
+    Object.values(design.devices).some((device) => device.type === "drill");
+  return type === "lathe" && requiresDrilling
     ? "undrilledBolt"
     : DEVICE_TYPES[type].produces;
 }
@@ -806,6 +1066,7 @@ function orderMaterialOutput(type) {
     lathe: "bolt",
     drill: "bolt",
     coater: "coatedBolt",
+    heatTreater: "hardenedBolt",
   }[type];
 }
 
@@ -861,19 +1122,20 @@ function deliverOrderMaterial(state, design, level, line, item, device) {
       state.orders.length > 0 &&
       state.orders.every((order) => order.status === "completed")
     ) {
-      state.mode = "success";
+      settleSuccessfulProduction(state, level);
     }
     return true;
   }
 
   const machine = state.machines[device.id];
   const material = orderMaterial(item);
-  if (!machine.active && !machine.output) {
-    machine.active = material;
-    machine.remaining = level.machineDurations[device.type];
-    machine.status = "working";
+  if (beginMachineWork(machine, material, device.type, level)) {
     line.item = null;
     return true;
+  }
+  if (!canMachineAcceptMaterial(machine)) {
+    item.status = "waiting";
+    return false;
   }
   if (!machine.waiting) {
     machine.waiting = material;
@@ -962,7 +1224,9 @@ function tickOrderScheduling(state, design, level, delta) {
     };
     machine.active = null;
     machine.remaining = 0;
+    if (machine.reliability) machine.totalDuration = 0;
     machine.status = "ready";
+    applyCompletedMachineCycle(state, id, design.devices[id].type, level);
   }
 
   for (const line of Object.values(state.lines)) {
@@ -971,7 +1235,10 @@ function tickOrderScheduling(state, design, level, delta) {
       line.item?.status === "waiting"
     ) {
       deliverToTarget(state, design, level, line);
-      if (state.mode === "success") return;
+      if (state.mode === "success") {
+        advanceMaintenance(state, level, delta);
+        return;
+      }
     }
   }
 
@@ -991,14 +1258,19 @@ function tickOrderScheduling(state, design, level, delta) {
       });
     }
     if (!machine.active && !machine.output && machine.waiting) {
-      machine.active = machine.waiting;
-      machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type];
-      machine.status = "working";
+      if (beginMachineWork(machine, machine.waiting, design.devices[id].type, level)) {
+        machine.waiting = null;
+      }
     }
   }
 
+  advanceMaintenance(state, level, delta);
+  settleSuccessfulProduction(state, level);
   settleOverdueOrders(state);
+  if (state.elapsed >= level.duration && state.mode === "running") {
+    state.warning = productionTargetSatisfied(state, level) ? "维护目标未完成" : state.warning;
+    state.mode = "failure";
+  }
 }
 
 export function forecastOrderCompletionTimes(state, design, level, queue = state.queue ?? []) {
@@ -1064,10 +1336,12 @@ function tick(state, design, level, delta) {
     if (machine.active) {
       machine.remaining = Math.max(0, machine.remaining - delta);
       if (machine.remaining <= 1e-9) {
-        machine.output = outputFor(level, design.devices[id].type);
+        machine.output = outputFor(level, design, design.devices[id].type);
         machine.active = null;
         machine.remaining = 0;
+        if (machine.reliability) machine.totalDuration = 0;
         machine.status = "ready";
+        applyCompletedMachineCycle(state, id, design.devices[id].type, level);
       }
     }
   }
@@ -1078,7 +1352,10 @@ function tick(state, design, level, delta) {
       line.item?.status === "waiting"
     ) {
       deliverToTarget(state, design, level, line);
-      if (state.mode === "success") return;
+      if (state.mode === "success") {
+        advanceMaintenance(state, level, delta);
+        return;
+      }
     }
   }
 
@@ -1098,15 +1375,17 @@ function tick(state, design, level, delta) {
       });
     }
     if (!machine.active && !machine.output && machine.waiting) {
-      machine.active = machine.waiting;
-      machine.waiting = null;
-      machine.remaining = level.machineDurations[design.devices[id].type];
-      machine.status = "working";
+      if (beginMachineWork(machine, machine.waiting, design.devices[id].type, level)) {
+        machine.waiting = null;
+      }
     }
   }
 
+  advanceMaintenance(state, level, delta);
+  settleSuccessfulProduction(state, level);
   if (state.elapsed >= level.duration && state.mode !== "success") {
     state.elapsed = level.duration;
+    state.warning = productionTargetSatisfied(state, level) ? "维护目标未完成" : state.warning;
     state.mode = "failure";
   }
 }

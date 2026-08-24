@@ -22,6 +22,7 @@ test("server-renders the mini factory game shell", async () => {
   assert.match(html, /10<\/b> 个合格螺栓/);
   assert.doesNotMatch(html, /未钻孔螺栓|两条紧凑支路/);
   assert.doesNotMatch(html, /第 1 关怎么玩/);
+  assert.doesNotMatch(html, /第 11 关怎么玩|设备可靠性说明|CHAPTER THREE/);
   assert.doesNotMatch(html, /aria-label="关闭玩法说明"/);
   assert.match(html, /aria-label="打开玩法说明"/);
   assert.match(html, /章节关卡/);

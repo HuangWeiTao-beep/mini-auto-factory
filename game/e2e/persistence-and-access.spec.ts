@@ -91,8 +91,8 @@ test("refresh keeps a level-six draft and palette seed but resets live order sta
   const sourceStyle = await page.locator(".factory-floor .machine--source").getAttribute("style");
   await expect.poll(() => page.evaluate(() => {
     const save = JSON.parse(localStorage.getItem("mini-factory-save") ?? "{}");
-    return [save.version, save.activeLevelId, save.drafts?.[6]?.connections?.length ?? 0, save.chapterTwoSeeds?.[6]];
-  })).toEqual([2, 6, 5, 1606]);
+    return [save.version, save.activeLevelId, save.drafts?.[6]?.connections?.length ?? 0, save.orderScenarioSeeds?.[6]];
+  })).toEqual([3, 6, 5, 1606]);
 
   await page.getByRole("button", { name: "开始生产" }).click();
   await advanceGameTime(page, 11);

@@ -1,7 +1,8 @@
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_STORAGE_KEY = "mini-factory-save";
-const MAX_SAVE_LEVEL_ID = 10;
-const FIRST_CHAPTER_TWO_LEVEL_ID = 6;
+const MAX_SAVE_LEVEL_ID = 15;
+const MAX_LEGACY_SAVE_LEVEL_ID = 10;
+const ORDER_SCENARIO_LEVEL_IDS = new Set([6, 7, 8, 9, 10, 13, 14, 15]);
 const MAX_SEED = 0xffffffff;
 
 const isRecord = (value) =>
@@ -14,7 +15,7 @@ export function createDefaultSaveState() {
     activeLevelId: 1,
     bestResults: {},
     drafts: {},
-    chapterTwoSeeds: {},
+    orderScenarioSeeds: {},
   };
 }
 
@@ -38,10 +39,10 @@ function isValidDraft(draft) {
 
 function isValidSaveState(value) {
   if (!isRecord(value)) return false;
-  if (value.version !== 1 && value.version !== SAVE_VERSION) return false;
+  if (value.version !== 1 && value.version !== 2 && value.version !== SAVE_VERSION) return false;
   if (!Number.isInteger(value.unlockedLevel) || value.unlockedLevel < 1) return false;
   if (
-    value.unlockedLevel > MAX_SAVE_LEVEL_ID ||
+    (value.version === SAVE_VERSION && value.unlockedLevel > MAX_SAVE_LEVEL_ID) ||
     !isRecord(value.bestResults) ||
     !isRecord(value.drafts)
   ) return false;
@@ -51,7 +52,7 @@ function isValidSaveState(value) {
   );
 }
 
-function normalizeChapterTwoSeeds(value) {
+function normalizeOrderScenarioSeeds(value, maxLevelId = MAX_SAVE_LEVEL_ID) {
   if (!isRecord(value)) return {};
   return Object.fromEntries(
     Object.entries(value).filter(([levelId, seed]) => {
@@ -59,12 +60,24 @@ function normalizeChapterTwoSeeds(value) {
       return (
         Number.isInteger(numericLevelId) &&
         String(numericLevelId) === levelId &&
-        numericLevelId >= FIRST_CHAPTER_TWO_LEVEL_ID &&
-        numericLevelId <= MAX_SAVE_LEVEL_ID &&
+        ORDER_SCENARIO_LEVEL_IDS.has(numericLevelId) &&
+        numericLevelId <= maxLevelId &&
         Number.isInteger(seed) &&
         seed >= 0 &&
         seed <= MAX_SEED
       );
+    }),
+  );
+}
+
+function normalizeLevelRecords(records, maxLevelId) {
+  return Object.fromEntries(
+    Object.entries(records).filter(([levelId]) => {
+      const numericLevelId = Number(levelId);
+      return Number.isInteger(numericLevelId) &&
+        String(numericLevelId) === levelId &&
+        numericLevelId >= 1 &&
+        numericLevelId <= maxLevelId;
     }),
   );
 }
@@ -79,15 +92,22 @@ function normalizedActiveLevelId(activeLevelId, unlockedLevel) {
 }
 
 function normalizeSaveState(state) {
+  const maxLevelId = state.version === SAVE_VERSION
+    ? MAX_SAVE_LEVEL_ID
+    : MAX_LEGACY_SAVE_LEVEL_ID;
+  const unlockedLevel = Math.min(state.unlockedLevel, maxLevelId);
   return {
     version: SAVE_VERSION,
-    unlockedLevel: state.unlockedLevel,
-    activeLevelId: normalizedActiveLevelId(state.activeLevelId, state.unlockedLevel),
-    bestResults: state.bestResults,
-    drafts: state.drafts,
-    chapterTwoSeeds: state.version === 1
+    unlockedLevel,
+    activeLevelId: normalizedActiveLevelId(state.activeLevelId, unlockedLevel),
+    bestResults: normalizeLevelRecords(state.bestResults, maxLevelId),
+    drafts: normalizeLevelRecords(state.drafts, maxLevelId),
+    orderScenarioSeeds: state.version === 1
       ? {}
-      : normalizeChapterTwoSeeds(state.chapterTwoSeeds),
+      : normalizeOrderScenarioSeeds(
+        state.version === 2 ? state.chapterTwoSeeds : state.orderScenarioSeeds,
+        maxLevelId,
+      ),
   };
 }
 

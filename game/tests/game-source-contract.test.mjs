@@ -237,6 +237,20 @@ test("chapter two exposes a pure order panel with stable accessible queue contro
   assert.match(game, /actionsEnabled=\{state\.mode === "running"\}/);
 });
 
+test("scheduled orders start collapsed behind an accessible toggle", async () => {
+  const orderPanel = await readFile(
+    new URL("../app/game/OrderPanel.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(orderPanel, /useState\(false\)/);
+  assert.match(orderPanel, /aria-expanded=\{scheduledExpanded\}/);
+  assert.match(orderPanel, /aria-controls="order-scheduled-list"/);
+  assert.match(orderPanel, /scheduledExpanded\s*&&\s*\(/);
+  assert.match(orderPanel, /id="order-scheduled-list"/);
+  assert.match(orderPanel, /scheduledExpanded \? "收起" : "展开"/);
+});
+
 test("chapter two uses scenario palette order and chapter-aware level copy", async () => {
   const [game, machine, levelSelect] = await Promise.all([
     readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
@@ -245,7 +259,8 @@ test("chapter two uses scenario palette order and chapter-aware level copy", asy
   ]);
 
   assert.match(game, /scenario\?\.paletteTypes \?\? level\.paletteTypes/);
-  assert.match(game, /CHAPTER \$\{level\.chapter === 1 \? "ONE" : "TWO"\}/);
+  assert.match(game, /CHAPTER THREE/);
+  assert.match(game, /level\.chapter === 1 \? "ONE" : "TWO"/);
   assert.match(game, /getSuccessSettlement\(level, maxLevelId\)/);
   assert.match(machine, /coater:\s*"◌"/);
   assert.match(machine, /镀层成为防锈螺栓/);
@@ -267,4 +282,55 @@ test("level six includes one-time order scheduling guidance", async () => {
   assert.match(game, /投料后锁定/);
   assert.match(game, /截止时间/);
   assert.match(game, /shownChapterTwoOnboarding/);
+});
+
+test("chapter three has its own map range and order-aware mission copy", async () => {
+  const [game, levelSelect] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/LevelSelectModal.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(levelSelect, /第三章：设备可靠性/);
+  assert.match(levelSelect, /levelId >= 11 && levelId <= 15/);
+  assert.match(levelSelect, /levelId >= 6 && levelId <= 10/);
+  assert.match(levelSelect, /if \(level\.orderConfig\)/);
+  assert.match(game, /isOrderSchedulingLevel\(level\)/);
+  assert.doesNotMatch(game, /level\.chapter === 2/);
+  assert.match(game, /CHAPTER THREE/);
+});
+
+test("chapter-three paused mode keeps order controls enabled and exposes maintenance objectives", async () => {
+  const [game, maintenancePanel] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/MaintenancePanel.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(game, /const chapterThreeOrderActionsEnabled = state\.mode === "running"[\s\S]*?level\.chapter === 3 && state\.mode === "paused"/);
+  assert.match(game, /orderActionsEnabled=\{chapterThreeOrderActionsEnabled\}/);
+  assert.match(
+    game,
+    /<OperationsPanel[\s\S]*?<OrderPanel[\s\S]*?actionsEnabled=\{chapterThreeOrderActionsEnabled\}/,
+  );
+  assert.match(maintenancePanel, /data-testid="maintenance-objective"/);
+  assert.match(maintenancePanel, /计划维护/);
+  assert.match(maintenancePanel, /队列调整/);
+});
+
+test("level eleven offers one-time reliability guidance with the full maintenance rules", async () => {
+  const game = await readFile(
+    new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(game, /activeLevelId === 1 \|\| activeLevelId === 6 \|\| activeLevelId === 11/);
+  assert.match(game, /shownChapterThreeOnboarding/);
+  assert.match(game, /levelId === 11 && !shownChapterThreeOnboarding\.current/);
+  assert.doesNotMatch(game, /restored\.activeLevelId === 11/);
+  assert.match(game, /第 11 关怎么玩/);
+  assert.match(game, /每完成一次加工周期/);
+  assert.match(game, /60%.*预警/);
+  assert.match(game, /85%.*高危.*20%/);
+  assert.match(game, /100%.*故障/);
+  assert.match(game, /完成当前物料.*停止接料/);
+  assert.match(game, /全厂只有一支维修队/);
 });

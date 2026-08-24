@@ -1,8 +1,8 @@
 import type { DragEvent, MouseEvent, SyntheticEvent } from "react";
-import { DEVICE_TYPES, MATERIALS } from "./factory-model.mjs";
+import { DEVICE_TYPES, MATERIALS, getLatheOutputLabel } from "./factory-model.mjs";
 import type { Device, DeviceType, LevelConfig, MaterialType, OrderMaterial, ProductionState } from "./factory-model.mjs";
 import { GRID } from "./factory-grid.mjs";
-import { getReliabilityView } from "./maintenance-model.mjs";
+import { getMaintenanceJobView, getReliabilityView } from "./maintenance-model.mjs";
 
 type Props = {
   device: Device;
@@ -44,7 +44,7 @@ function machineDescription(device: Device, level: LevelConfig) {
   const duration = processingDuration(device, level).toFixed(1);
   if (device.type === "cutter") return `长钢棒 → 短料 · ${duration} 秒`;
   if (device.type === "lathe") {
-    const output = level.chapter === 1 && level.id > 1 ? "未钻孔螺栓" : "螺栓";
+    const output = getLatheOutputLabel(level);
     return `短料 → ${output} · ${duration} 秒`;
   }
   if (device.type === "drill") return `未钻孔螺栓 → 螺栓 · ${duration} 秒`;
@@ -93,7 +93,7 @@ export function MachineCard({
         : status;
   const hasInput = device.type !== "source";
   const hasOutput = device.type !== "exit";
-  const duration = processingDuration(device, level);
+  const duration = machine?.totalDuration ?? processingDuration(device, level);
   const progress = machine?.active
     ? Math.max(0, 1 - machine.remaining / duration)
     : 0;
@@ -112,12 +112,9 @@ export function MachineCard({
     ? reliability?.band ?? "normal"
     : machine?.reliability?.status ?? "normal";
   const reliabilityLabel = reliabilityLabels[reliabilityState];
-  const activeMaintenance = state.maintenance?.activeJob?.machineId === device.id
-    ? state.maintenance.activeJob
+  const maintenanceJob = state.maintenance
+    ? getMaintenanceJobView(state, device.id)
     : null;
-  const queuedPlannedMaintenance = state.maintenance?.queue.some(
-    (job) => job.machineId === device.id && job.kind === "planned",
-  ) ?? false;
 
   const stopMaintenanceButtonPropagation = (event: SyntheticEvent<HTMLButtonElement>) => {
     event.stopPropagation();
@@ -184,8 +181,10 @@ export function MachineCard({
           <div className="machine__wear-track" aria-label={`磨损 ${Math.round(reliability.wear)}%`}>
             <i style={{ width: `${Math.min(100, reliability.wear)}%` }} />
           </div>
-          {activeMaintenance && (
-            <small className="machine__maintenance-time">剩余 {activeMaintenance.remaining.toFixed(1)}s · 停止接料</small>
+          {maintenanceJob && (
+            <small className="machine__maintenance-time">
+              {maintenanceJob.status === "active" ? "维修中" : "等待维修"} · 剩余 {maintenanceJob.remaining.toFixed(1)}s · 停止接料
+            </small>
           )}
           {machine.reliability.status === "available" && (
             <button
@@ -199,11 +198,11 @@ export function MachineCard({
               onDragStart={stopMaintenanceButtonPropagation}
             >安排维护</button>
           )}
-          {machine.reliability.status === "maintenance-pending" && queuedPlannedMaintenance && (
+          {machine.reliability.status === "maintenance-pending" && maintenanceJob?.kind === "planned" && (
             <button
               type="button"
               data-testid={`maintenance-card-cancel-${device.id}`}
-              disabled={!maintenanceActionsEnabled}
+              disabled={!maintenanceActionsEnabled || reliability.band === "failed"}
               onClick={(event) => {
                 stopMaintenanceButtonPropagation(event);
                 onCancelMaintenance(device.id);

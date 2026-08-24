@@ -93,6 +93,9 @@ const freezeLevel = (level) =>
       ? Object.freeze({
           ...level.maintenance,
           wearPerCycle: Object.freeze({ ...level.maintenance.wearPerCycle }),
+          objective: level.maintenance.objective
+            ? Object.freeze({ ...level.maintenance.objective })
+            : null,
         })
       : null,
   });
@@ -350,6 +353,7 @@ export const LEVELS = Object.freeze({
       slowdownThreshold: 85,
       failureThreshold: 100,
       wearPerCycle: { cutter: 8, lathe: 18 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
     },
     step: 0.01,
   }),
@@ -376,6 +380,7 @@ export const LEVELS = Object.freeze({
       slowdownThreshold: 85,
       failureThreshold: 100,
       wearPerCycle: { cutter: 10, lathe: 14, drill: 18 },
+      objective: { plannedCompletions: 2, queueReorders: 1 },
     },
     step: 0.01,
   }),
@@ -404,6 +409,7 @@ export const LEVELS = Object.freeze({
       slowdownThreshold: 85,
       failureThreshold: 100,
       wearPerCycle: { cutter: 13, lathe: 15, drill: 25, heatTreater: 40 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
     },
     step: 0.01,
   }),
@@ -433,6 +439,7 @@ export const LEVELS = Object.freeze({
       slowdownThreshold: 85,
       failureThreshold: 100,
       wearPerCycle: { cutter: 12, lathe: 14, drill: 24, coater: 28, heatTreater: 38 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
     },
     step: 0.01,
   }),
@@ -462,6 +469,7 @@ export const LEVELS = Object.freeze({
       slowdownThreshold: 85,
       failureThreshold: 100,
       wearPerCycle: { cutter: 13, lathe: 15, drill: 25, coater: 30, heatTreater: 40 },
+      objective: { plannedCompletions: 1, queueReorders: 0 },
     },
     step: 0.01,
   }),
@@ -484,6 +492,12 @@ export function isOrderSchedulingLevel(levelOrId) {
 export function isMaintenanceLevel(levelOrId) {
   if (typeof levelOrId === "number") return LEVELS[levelOrId]?.maintenance != null;
   return levelOrId?.maintenance != null;
+}
+
+export function getLatheOutputLabel(level) {
+  return !isOrderSchedulingLevel(level) && (level.deviceLimits?.drill ?? 0) > 0
+    ? "未钻孔螺栓"
+    : "螺栓";
 }
 
 export function getAllowedPaletteTypes(level) {
@@ -613,7 +627,9 @@ export function createProductionState(design, level, scenario) {
         waiting: null,
         output: null,
         warning: null,
-        ...(isMaintenanceLevel(level) ? { reliability: createMachineReliability() } : {}),
+        ...(isMaintenanceLevel(level)
+          ? { totalDuration: 0, reliability: createMachineReliability() }
+          : {}),
       };
     }
   }
@@ -857,6 +873,7 @@ export function startProduction(state, options = {}) {
     if (!Array.isArray(state.orders)) {
       return createProductionState(
         options.design ?? { devices: {}, connections: [] },
+        options.level,
       );
     }
     if (["success", "failure"].includes(state.mode)) return state;
@@ -878,6 +895,7 @@ export function startProduction(state, options = {}) {
     return {
       ...createProductionState(
         options.design ?? { devices: {}, connections: [] },
+        options.level,
       ),
       mode: "running",
     };
@@ -918,13 +936,34 @@ function selectOutgoingLine(state, design, deviceId, material = null) {
 function beginMachineWork(machine, material, deviceType, level) {
   if (!canMachineAcceptMaterial(machine) || machine.active || machine.output) return false;
   machine.active = material;
-  machine.remaining = getProcessingDuration(
+  const duration = getProcessingDuration(
     machine,
     level.machineDurations[deviceType] ?? DEVICE_TYPES[deviceType].duration,
     level,
   );
+  machine.remaining = duration;
+  if (machine.reliability) machine.totalDuration = duration;
   machine.status = "working";
   return true;
+}
+
+function maintenanceObjectiveSatisfied(state, level) {
+  const objective = level.maintenance?.objective;
+  if (!objective) return true;
+  return (state.maintenance?.plannedCompleted ?? 0) >= objective.plannedCompletions
+    && (state.maintenance?.queueReorders ?? 0) >= objective.queueReorders;
+}
+
+function productionTargetSatisfied(state, level) {
+  return isOrderSchedulingLevel(level)
+    ? state.orders?.length > 0 && state.orders.every((order) => order.status === "completed")
+    : state.completed >= level.target;
+}
+
+function settleSuccessfulProduction(state, level) {
+  if (productionTargetSatisfied(state, level) && maintenanceObjectiveSatisfied(state, level)) {
+    state.mode = "success";
+  }
 }
 
 function deliverToTarget(state, design, level, line) {
@@ -958,9 +997,9 @@ function deliverToTarget(state, design, level, line) {
   }
 
   if (device.type === "exit") {
-    state.completed += 1;
+    state.completed = Math.min(level.target, state.completed + 1);
     line.item = null;
-    if (state.completed >= level.target) state.mode = "success";
+    settleSuccessfulProduction(state, level);
     return true;
   }
 
@@ -1083,7 +1122,7 @@ function deliverOrderMaterial(state, design, level, line, item, device) {
       state.orders.length > 0 &&
       state.orders.every((order) => order.status === "completed")
     ) {
-      state.mode = "success";
+      settleSuccessfulProduction(state, level);
     }
     return true;
   }
@@ -1185,6 +1224,7 @@ function tickOrderScheduling(state, design, level, delta) {
     };
     machine.active = null;
     machine.remaining = 0;
+    if (machine.reliability) machine.totalDuration = 0;
     machine.status = "ready";
     applyCompletedMachineCycle(state, id, design.devices[id].type, level);
   }
@@ -1225,7 +1265,12 @@ function tickOrderScheduling(state, design, level, delta) {
   }
 
   advanceMaintenance(state, level, delta);
+  settleSuccessfulProduction(state, level);
   settleOverdueOrders(state);
+  if (state.elapsed >= level.duration && state.mode === "running") {
+    state.warning = productionTargetSatisfied(state, level) ? "维护目标未完成" : state.warning;
+    state.mode = "failure";
+  }
 }
 
 export function forecastOrderCompletionTimes(state, design, level, queue = state.queue ?? []) {
@@ -1294,6 +1339,7 @@ function tick(state, design, level, delta) {
         machine.output = outputFor(level, design, design.devices[id].type);
         machine.active = null;
         machine.remaining = 0;
+        if (machine.reliability) machine.totalDuration = 0;
         machine.status = "ready";
         applyCompletedMachineCycle(state, id, design.devices[id].type, level);
       }
@@ -1336,8 +1382,10 @@ function tick(state, design, level, delta) {
   }
 
   advanceMaintenance(state, level, delta);
+  settleSuccessfulProduction(state, level);
   if (state.elapsed >= level.duration && state.mode !== "success") {
     state.elapsed = level.duration;
+    state.warning = productionTargetSatisfied(state, level) ? "维护目标未完成" : state.warning;
     state.mode = "failure";
   }
 }

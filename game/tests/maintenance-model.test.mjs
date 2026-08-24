@@ -7,6 +7,7 @@ import {
   cancelMaintenanceRequest,
   createMachineReliability,
   createMaintenanceState,
+  getMaintenanceJobView,
   getProcessingDuration,
   getReliabilityView,
   moveMaintenanceRequest,
@@ -60,9 +61,27 @@ test("request, cancel, and move preserve immutable state boundaries", () => {
   const moved = requestMaintenance(requested, "drill", level);
   const reordered = moveMaintenanceRequest(moved, "drill", 0);
   assert.deepEqual(reordered.maintenance.queue.map((job) => job.machineId), ["drill", "lathe"]);
+  assert.equal(reordered.maintenance.queueReorders, 1);
   const cancelled = cancelMaintenanceRequest(reordered, "drill");
   assert.equal(cancelled.machines.drill.reliability.status, "available");
   assert.deepEqual(cancelled.maintenance.queue.map((job) => job.machineId), ["lathe"]);
+});
+
+test("a planned job that reaches failure cannot be cancelled into a free available machine", () => {
+  const state = runtimeWithMachines(["lathe"]);
+  state.machines.lathe.reliability.wear = 90;
+  const requested = requestMaintenance(state, "lathe", level);
+
+  applyCompletedMachineCycle(requested, "lathe", "lathe", level);
+  const cancelled = cancelMaintenanceRequest(requested, "lathe");
+
+  assert.strictEqual(cancelled, requested);
+  assert.equal(cancelled.machines.lathe.reliability.wear, 100);
+  assert.equal(cancelled.machines.lathe.reliability.status, "maintenance-pending");
+  assert.equal(canMachineAcceptMaterial(cancelled.machines.lathe), false);
+  assert.deepEqual(cancelled.maintenance.queue, [
+    { machineId: "lathe", kind: "planned", remaining: 4 },
+  ]);
 });
 
 test("request rejects machines without an existing reliability record", () => {
@@ -137,7 +156,21 @@ test("maintenance completion resets wear and material acceptance follows status"
   assert.equal(requested.machines.lathe.reliability.wear, 0);
   assert.equal(requested.machines.lathe.reliability.status, "available");
   assert.equal(canMachineAcceptMaterial(requested.machines.lathe), true);
+  assert.equal(requested.maintenance.plannedCompleted, 1);
   requested.machines.lathe.reliability.status = "broken";
   assert.equal(canMachineAcceptMaterial(requested.machines.lathe), false);
   assert.equal(canMachineAcceptMaterial({}), true);
+});
+
+test("maintenance job view exposes queued and active stop-receiving timing", () => {
+  const state = runtimeWithMachines(["lathe", "drill"]);
+  state.maintenance.activeJob = { machineId: "lathe", kind: "planned", remaining: 2.5 };
+  state.maintenance.queue = [{ machineId: "drill", kind: "repair", remaining: 7 }];
+
+  assert.deepEqual(getMaintenanceJobView(state, "lathe"), {
+    machineId: "lathe", kind: "planned", remaining: 2.5, status: "active", queueIndex: -1,
+  });
+  assert.deepEqual(getMaintenanceJobView(state, "drill"), {
+    machineId: "drill", kind: "repair", remaining: 7, status: "queued", queueIndex: 0,
+  });
 });

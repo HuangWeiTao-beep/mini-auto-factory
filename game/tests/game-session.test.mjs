@@ -78,6 +78,32 @@ function chapterThreeSession(mode) {
   };
 }
 
+function chapterThreeOrderSession(mode) {
+  const scenario = {
+    levelId: 13,
+    seed: 2313,
+    paletteTypes: LEVELS[13].paletteTypes,
+    orders: [
+      { id: "L13-A", levelId: 13, productId: "standard", arrivesAt: 0, deadlineAt: 40, status: "waiting" },
+      { id: "L13-B", levelId: 13, productId: "hardened", arrivesAt: 0, deadlineAt: 35, status: "waiting" },
+    ],
+    queue: [],
+  };
+  const state = createProductionState(draft, LEVELS[13], scenario);
+  return {
+    activeLevelId: 13,
+    unlockedLevel: 13,
+    bestResults: {},
+    drafts: { 13: draft },
+    orderScenarioSeeds: { 13: 2313 },
+    scenario,
+    design: draft,
+    state: { ...state, mode },
+    editedWhilePaused: false,
+    recordBroken: false,
+  };
+}
+
 test("maintenance actions are allowed only while running or paused", () => {
   const runningSession = chapterThreeSession("running");
   const pausedSession = chapterThreeSession("paused");
@@ -88,6 +114,25 @@ test("maintenance actions are allowed only while running or paused", () => {
   assert.equal(requested.state.maintenance.queue[0].machineId, "lathe");
   assert.equal(requestSessionMaintenance(pausedSession, "lathe").state.maintenance.queue[0].machineId, "lathe");
   assert.strictEqual(requestSessionMaintenance(designSession, "lathe"), designSession);
+});
+
+test("chapter-three order actions remain editable while paused", () => {
+  const paused = chapterThreeOrderSession("paused");
+  const firstQueued = enqueueSessionOrder(paused, "L13-A");
+  const secondQueued = enqueueSessionOrder(firstQueued, "L13-B");
+  const moved = moveSessionQueuedOrder(secondQueued, "L13-B", 0);
+
+  assert.deepEqual(firstQueued.state.queue, ["L13-A"]);
+  assert.deepEqual(secondQueued.state.queue, ["L13-A", "L13-B"]);
+  assert.deepEqual(moved.state.queue, ["L13-B", "L13-A"]);
+
+  const freshPaused = chapterThreeOrderSession("paused");
+  const prioritized = prioritizeSessionOrder(freshPaused, "L13-B");
+  assert.deepEqual(prioritized.state.queue, ["L13-B"]);
+  assert.equal(
+    prioritized.state.orders.find((order) => order.id === "L13-B")?.status,
+    "queued",
+  );
 });
 
 test("maintenance session actions preserve identity for no-ops and reorder waiting jobs", () => {
@@ -450,7 +495,12 @@ test("chapter-three restore keeps the seed but rebuilds pristine maintenance sta
   const restored = restoreGameSession(storage);
 
   assert.equal(restored.orderScenarioSeeds[13], 2313);
-  assert.deepEqual(restored.state.maintenance, { activeJob: null, queue: [] });
+  assert.deepEqual(restored.state.maintenance, {
+    activeJob: null,
+    queue: [],
+    plannedCompleted: 0,
+    queueReorders: 0,
+  });
   assert.ok(Object.values(restored.state.machines).every((machine) => machine.reliability.wear === 0));
 });
 

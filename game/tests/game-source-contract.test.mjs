@@ -285,6 +285,23 @@ test("chapter three has its own map range and order-aware mission copy", async (
   assert.match(game, /CHAPTER THREE/);
 });
 
+test("chapter-three paused mode keeps order controls enabled and exposes maintenance objectives", async () => {
+  const [game, maintenancePanel] = await Promise.all([
+    readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/game/MaintenancePanel.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(game, /const chapterThreeOrderActionsEnabled = state\.mode === "running"[\s\S]*?level\.chapter === 3 && state\.mode === "paused"/);
+  assert.match(game, /orderActionsEnabled=\{chapterThreeOrderActionsEnabled\}/);
+  assert.match(
+    game,
+    /<OperationsPanel[\s\S]*?<OrderPanel[\s\S]*?actionsEnabled=\{chapterThreeOrderActionsEnabled\}/,
+  );
+  assert.match(maintenancePanel, /data-testid="maintenance-objective"/);
+  assert.match(maintenancePanel, /计划维护/);
+  assert.match(maintenancePanel, /队列调整/);
+});
+
 test("level eleven offers one-time reliability guidance with the full maintenance rules", async () => {
   const game = await readFile(
     new URL("../app/game/MiniFactoryGame.tsx", import.meta.url),

@@ -84,8 +84,21 @@ test("dangerous idle furnace recommends scheduling maintenance", () => {
 
 test("a broken machine behind a planned job recommends repair priority", () => {
   const input = queuedRepairState();
+  input.state.maintenance.activeJob = null;
+  input.state.machines.lathe.reliability.status = "maintenance-pending";
+  input.state.maintenance.queue.unshift({ machineId: "lathe", kind: "planned", remaining: 4 });
 
   assert.equal(getMaintenanceFeedback(input).recommendation.kind, "prioritizeRepair");
+});
+
+test("a repair already at the waiting front recommends monitoring instead of a no-op priority action", () => {
+  const input = queuedRepairState();
+  input.state.maintenance.activeJob = null;
+
+  assert.deepEqual(getMaintenanceFeedback(input).recommendation, {
+    kind: "monitor",
+    message: "热处理炉已经在队首，等待维修队开始抢修。",
+  });
 });
 
 test("maintenance feedback returns one wear view for each processing machine", () => {
@@ -116,7 +129,7 @@ test("a machine type without a wear rate is not treated as one cycle from failur
   });
 });
 
-test("hypothetical forecasts evaluate only the first three candidates by band remaining cycles and id", () => {
+test("hypothetical forecasting simulates only the selected highest-risk candidate", () => {
   const design = {
     devices: {
       "warning-a": device("warning-a", "cutter", 1),
@@ -159,5 +172,5 @@ test("hypothetical forecasts evaluate only the first three candidates by band re
     "danger-c",
     "warning-a",
   ]);
-  assert.deepEqual(forecastedMachineIds, ["danger-a", "danger-b", "danger-c"]);
+  assert.deepEqual(forecastedMachineIds, ["danger-a"]);
 });

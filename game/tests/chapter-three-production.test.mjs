@@ -12,6 +12,7 @@ import {
   createScenarioValidationDesign,
   enqueueProductionOrder,
   moveProductionOrder,
+  pauseProduction,
   removeConnection,
   startProduction,
 } from "../app/game/factory-model.mjs";
@@ -205,6 +206,63 @@ function simulateChapterThreeLevel(levelId) {
   }
   return { design, scenario, state };
 }
+
+function simulateWithoutPlannedMaintenance(levelId) {
+  const level = LEVELS[levelId];
+  const design = createPlayableChapterThreeDesign(level);
+  const scenario = level.orderConfig
+    ? createOrderScenario(levelId, FIXED_SCENARIO_SEEDS[levelId])
+    : undefined;
+  let state = startProduction(createProductionState(design, level, scenario), {
+    edited: false,
+    design,
+    level,
+  });
+  while (state.mode === "running" && state.elapsed < level.duration) {
+    state = advanceProduction(state, design, level, level.step);
+    if (level.orderConfig) state = enqueueWaitingOrdersByDeadline(state);
+  }
+  return state;
+}
+
+function simulateLevelTwelveWithoutQueueReorder() {
+  const level = LEVELS[12];
+  const design = createPlayableChapterThreeDesign(level);
+  let state = startProduction(createProductionState(design, level), {
+    edited: false,
+    design,
+    level,
+  });
+  while (state.mode === "running" && state.elapsed < level.duration) {
+    state = advanceProduction(state, design, level, level.step);
+    for (const [machineId, machine] of Object.entries(state.machines)) {
+      if (machine.reliability?.status !== "available") continue;
+      const view = getReliabilityView(machine, design.devices[machineId].type, level);
+      if (view.band === "warning" && view.remainingCycles <= 3) {
+        state = requestMaintenance(state, machineId, level);
+      }
+    }
+  }
+  return state;
+}
+
+test("every chapter-three level rejects a zero-planned-maintenance baseline", () => {
+  for (const levelId of [11, 12, 13, 14, 15]) {
+    const state = simulateWithoutPlannedMaintenance(levelId);
+    assert.equal(state.mode, "failure", `level ${levelId} must require reliability work`);
+    assert.equal(state.maintenance.plannedCompleted, 0);
+  }
+});
+
+test("level twelve does not pass when two maintenances finish without a queue reorder", () => {
+  const state = simulateLevelTwelveWithoutQueueReorder();
+
+  assert.equal(state.maintenance.plannedCompleted >= 2, true);
+  assert.equal(state.maintenance.queueReorders, 0);
+  assert.equal(state.completed, LEVELS[12].target);
+  assert.equal(state.warning, "维护目标未完成");
+  assert.equal(state.mode, "failure");
+});
 
 test("levels eleven through fifteen complete with legal layouts and at least fifteen percent slack", () => {
   const results = [];
@@ -460,8 +518,42 @@ test("maintenance levels initialize reliability without changing old levels", ()
   const state = createProductionState(design, maintenanceLevel);
 
   assert.deepEqual(state.machines.lathe.reliability, { wear: 0, status: "available" });
-  assert.deepEqual(state.maintenance, { activeJob: null, queue: [] });
+  assert.deepEqual(state.maintenance, {
+    activeJob: null,
+    queue: [],
+    plannedCompleted: 0,
+    queueReorders: 0,
+  });
   assert.equal("reliability" in createProductionState(design, LEVELS[1]).machines.lathe, false);
+});
+
+test("editing a paused level-eleven layout restarts with complete pristine reliability state", () => {
+  const level = LEVELS[11];
+  const design = createPlayableChapterThreeDesign(level);
+  let running = startProduction(createProductionState(design, level), {
+    edited: false,
+    design,
+    level,
+  });
+  running = advanceProduction(running, design, level, 10);
+  running.machines["lathe-1"].reliability.wear = 100;
+  const paused = pauseProduction(running);
+
+  const restarted = startProduction(paused, { edited: true, design, level });
+
+  assert.equal(restarted.mode, "running");
+  assert.equal(restarted.elapsed, 0);
+  assert.equal(restarted.completed, 0);
+  assert.deepEqual(restarted.maintenance, {
+    activeJob: null,
+    queue: [],
+    plannedCompleted: 0,
+    queueReorders: 0,
+  });
+  assert.ok(Object.values(restarted.machines).every(
+    (machine) => machine.reliability?.wear === 0 && machine.reliability.status === "available",
+  ));
+  assert.doesNotThrow(() => advanceProduction(restarted, design, level, 20));
 });
 
 test("a requested machine finishes its active item, stops accepting, then resumes after four seconds", () => {
@@ -501,4 +593,5 @@ test("slowdown duration is locked when a maintenance machine starts work", () =>
 
   const started = advanceProduction(state, design, maintenanceLevel, maintenanceLevel.step);
   assert.equal(started.machines.lathe.remaining, 3.6);
+  assert.equal(started.machines.lathe.totalDuration, 3.6);
 });

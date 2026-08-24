@@ -9,6 +9,7 @@ import {
   canPlaceDevice,
   connectDevices,
   getDeviceLimit,
+  getLatheOutputLabel,
   isOrderSchedulingLevel,
   moveDevice,
   outgoing,
@@ -88,6 +89,8 @@ export function MiniFactoryGame() {
   const requiredDeviceCount = palette.reduce((total, item) => total + item.limit, 0);
   const orderScheduling = isOrderSchedulingLevel(level);
   const maintenanceLevel = Boolean(level.maintenance);
+  const chapterThreeOrderActionsEnabled = state.mode === "running"
+    || (level.chapter === 3 && state.mode === "paused");
   const maintenanceCacheState = Object.entries(state.machines)
     .sort(([leftId], [rightId]) => leftId < rightId ? -1 : leftId > rightId ? 1 : 0)
     .map(([machineId, machine]) => `${machineId}:${machine.reliability?.wear ?? 0}:${machine.reliability?.status ?? "available"}`)
@@ -302,7 +305,7 @@ export function MiniFactoryGame() {
     if (type === "source") return `每 ${level.sourceInterval} 秒生成长钢棒`;
     const duration = type === "exit" ? 0 : level.machineDurations[type] ?? DEVICE_TYPES[type].duration;
     if (type === "cutter") return `${duration} 秒 · 钢棒变短料`;
-    if (type === "lathe") return `${duration} 秒 · 短料变${level.chapter === 1 && level.id > 1 ? "未钻孔螺栓" : "螺栓"}`;
+    if (type === "lathe") return `${duration} 秒 · 短料变${getLatheOutputLabel(level)}`;
     if (type === "drill") return `${duration} 秒 · 钻孔成为${orderScheduling ? "精密螺栓" : "合格螺栓"}`;
     if (type === "coater") return `${duration} 秒 · 镀层成为防锈螺栓`;
     if (type === "heatTreater") return `${duration} 秒 · 热处理成为强化螺栓`;
@@ -433,7 +436,7 @@ export function MiniFactoryGame() {
             onMoveUp={moveMaintenanceUp}
             onMoveDown={moveMaintenanceDown}
             feedback={operationsFeedback}
-            orderActionsEnabled={state.mode === "running"}
+            orderActionsEnabled={chapterThreeOrderActionsEnabled}
             maintenanceActionsEnabled={state.mode === "running" || state.mode === "paused"}
             onEnqueueOrder={enqueueOrder}
             onPrioritizeOrder={prioritizeOrder}
@@ -447,7 +450,7 @@ export function MiniFactoryGame() {
                 elapsed={state.elapsed}
                 failure={state.failure}
                 feedback={schedulingFeedback}
-                actionsEnabled={state.mode === "running"}
+                actionsEnabled={chapterThreeOrderActionsEnabled}
                 onEnqueue={enqueueOrder}
                 onMoveUp={moveOrderUp}
                 onMoveDown={moveOrderDown}

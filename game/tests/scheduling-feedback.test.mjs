@@ -59,6 +59,54 @@ test("scheduling feedback names the first missing production link for a product"
   });
 });
 
+test("hardened route feedback names missing lathe-to-heat-treatment connection", () => {
+  const design = {
+    devices: {
+      source: device("source", "source", 1),
+      cutter: device("cutter", "cutter", 2),
+      lathe: device("lathe", "lathe", 3),
+      heat: device("heat", "heatTreater", 4),
+      exit: device("exit", "exit", 5),
+    },
+    connections: [
+      connection("source-cutter", "source", "cutter"),
+      connection("cutter-lathe", "cutter", "lathe"),
+      connection("heat-exit", "heat", "exit"),
+    ],
+  };
+  const orders = [{ id: "L13-H1", productId: "hardened", deadlineAt: 30, status: "waiting" }];
+
+  assert.equal(
+    getSchedulingFeedback({ design, level, orders, queue: [], elapsed: 0 })
+      .orders[0].route.missingLink,
+    "车削机 → 热处理炉",
+  );
+});
+
+test("hardened route feedback names missing heat-treatment-to-exit connection", () => {
+  const design = {
+    devices: {
+      source: device("source", "source", 1),
+      cutter: device("cutter", "cutter", 2),
+      lathe: device("lathe", "lathe", 3),
+      heat: device("heat", "heatTreater", 4),
+      exit: device("exit", "exit", 5),
+    },
+    connections: [
+      connection("source-cutter", "source", "cutter"),
+      connection("cutter-lathe", "cutter", "lathe"),
+      connection("lathe-heat", "lathe", "heat"),
+    ],
+  };
+  const orders = [{ id: "L13-H2", productId: "hardened", deadlineAt: 30, status: "waiting" }];
+
+  assert.equal(
+    getSchedulingFeedback({ design, level, orders, queue: [], elapsed: 0 })
+      .orders[0].route.missingLink,
+    "热处理炉 → 成品出口",
+  );
+});
+
 test("scheduling feedback flags a late queued order and recommends moving it to the front", () => {
   const design = {
     devices: {

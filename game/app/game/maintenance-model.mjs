@@ -1,6 +1,11 @@
 export const createMachineReliability = () => ({ wear: 0, status: "available" });
 
-export const createMaintenanceState = () => ({ activeJob: null, queue: [] });
+export const createMaintenanceState = () => ({
+  activeJob: null,
+  queue: [],
+  plannedCompleted: 0,
+  queueReorders: 0,
+});
 
 export function getReliabilityView(machine, deviceType, level) {
   const config = level?.maintenance ?? {};
@@ -57,6 +62,7 @@ export function cancelMaintenanceRequest(state, machineId) {
   const queue = state?.maintenance?.queue ?? [];
   const index = queue.findIndex((job) => job.machineId === machineId && job.kind === "planned");
   if (index < 0) return state;
+  if ((state.machines?.[machineId]?.reliability?.wear ?? 0) >= 100) return state;
   const next = cloneRuntimeState(state);
   next.maintenance.queue.splice(index, 1);
   const machine = next.machines?.[machineId];
@@ -67,11 +73,12 @@ export function cancelMaintenanceRequest(state, machineId) {
 export function moveMaintenanceRequest(state, machineId, nextIndex) {
   const queue = state?.maintenance?.queue ?? [];
   const index = queue.findIndex((job) => job.machineId === machineId);
-  if (index < 0 || queue.length < 2) return state;
+  const target = Math.max(0, Math.min(Number.isFinite(nextIndex) ? Math.trunc(nextIndex) : 0, queue.length - 1));
+  if (index < 0 || queue.length < 2 || target === index) return state;
   const next = cloneRuntimeState(state);
   const [job] = next.maintenance.queue.splice(index, 1);
-  const target = Math.max(0, Math.min(Number.isFinite(nextIndex) ? Math.trunc(nextIndex) : 0, next.maintenance.queue.length));
   next.maintenance.queue.splice(target, 0, job);
+  next.maintenance.queueReorders = (next.maintenance.queueReorders ?? 0) + 1;
   return next;
 }
 
@@ -99,7 +106,17 @@ export function applyCompletedMachineCycle(state, machineId, deviceType, level) 
   return state;
 }
 
-function startNextMaintenance(state, level) {
+export function getMaintenanceJobView(state, machineId) {
+  if (state?.maintenance?.activeJob?.machineId === machineId) {
+    return { ...state.maintenance.activeJob, status: "active", queueIndex: -1 };
+  }
+  const queueIndex = state?.maintenance?.queue?.findIndex((job) => job.machineId === machineId) ?? -1;
+  return queueIndex < 0
+    ? null
+    : { ...state.maintenance.queue[queueIndex], status: "queued", queueIndex };
+}
+
+function startNextMaintenance(state) {
   if (state.maintenance.activeJob) return;
   const queue = state.maintenance.queue ?? [];
   const job = queue[0];
@@ -114,7 +131,7 @@ function startNextMaintenance(state, level) {
 }
 
 export function advanceMaintenance(state, level, delta) {
-  if (!state?.maintenance) return state;
+  if (!state?.maintenance || !level?.maintenance) return state;
   const activeAtStart = state.maintenance.activeJob;
   if (activeAtStart) {
     activeAtStart.remaining -= Math.max(0, delta ?? 0);
@@ -127,10 +144,13 @@ export function advanceMaintenance(state, level, delta) {
           status: "available",
         };
       }
+      if (activeAtStart.kind === "planned") {
+        state.maintenance.plannedCompleted = (state.maintenance.plannedCompleted ?? 0) + 1;
+      }
       state.maintenance.activeJob = null;
     }
   }
-  startNextMaintenance(state, level);
+  startNextMaintenance(state);
   return state;
 }
 

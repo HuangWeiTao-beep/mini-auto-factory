@@ -209,21 +209,27 @@ export function resetGameSession(session, keepDesign) {
   };
 }
 
+function orderActionsEnabled(session) {
+  const level = LEVELS[session.activeLevelId];
+  return session.state.mode === "running"
+    || (session.state.mode === "paused" && level?.chapter === 3 && isOrderSchedulingLevel(level));
+}
+
 export function enqueueSessionOrder(session, orderId) {
-  if (session.state.mode !== "running") return session;
+  if (!orderActionsEnabled(session)) return session;
   const state = enqueueProductionOrder(session.state, orderId);
   return state === session.state ? session : { ...session, state };
 }
 
 export function moveSessionQueuedOrder(session, orderId, nextIndex) {
   if (!Number.isFinite(nextIndex) || !Number.isInteger(nextIndex)) return session;
-  if (session.state.mode !== "running") return session;
+  if (!orderActionsEnabled(session)) return session;
   const state = moveProductionOrder(session.state, orderId, nextIndex);
   return state === session.state ? session : { ...session, state };
 }
 
 export function prioritizeSessionOrder(session, orderId) {
-  if (session.state.mode !== "running") return session;
+  if (!orderActionsEnabled(session)) return session;
   const enqueued = enqueueProductionOrder(session.state, orderId);
   const state = moveProductionOrder(enqueued, orderId, 0);
   return state === session.state ? session : { ...session, state };

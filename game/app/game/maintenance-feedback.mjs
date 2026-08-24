@@ -1,5 +1,5 @@
 import { DEVICE_TYPES, PROCESSING_TYPES, forecastOrderCompletionTimes } from "./factory-model.mjs";
-import { getReliabilityView, requestMaintenance } from "./maintenance-model.mjs";
+import { getMaintenanceJobView, getReliabilityView, requestMaintenance } from "./maintenance-model.mjs";
 
 const BAND_RANK = Object.freeze({ failed: 0, danger: 1, warning: 2, normal: 3 });
 
@@ -10,13 +10,7 @@ function compareRisk(left, right) {
 }
 
 function maintenanceJobFor(state, machineId) {
-  if (state.maintenance?.activeJob?.machineId === machineId) {
-    return { ...state.maintenance.activeJob, status: "active", queueIndex: -1 };
-  }
-  const queueIndex = state.maintenance?.queue?.findIndex((job) => job.machineId === machineId) ?? -1;
-  return queueIndex < 0
-    ? null
-    : { ...state.maintenance.queue[queueIndex], status: "queued", queueIndex };
+  return getMaintenanceJobView(state, machineId);
 }
 
 function machineViews(state, design, level) {
@@ -63,7 +57,7 @@ function repairRecommendation(state, machines) {
   const broken = machines.find((machine) => machine.reliabilityStatus === "broken");
   if (broken) {
     const repairJob = broken.maintenanceJob?.kind === "repair" ? broken.maintenanceJob : null;
-    if (repairJob?.status === "queued") {
+    if (repairJob?.status === "queued" && repairJob.queueIndex > 0) {
       return {
         kind: "prioritizeRepair",
         machineId: broken.id,
@@ -74,13 +68,22 @@ function repairRecommendation(state, machines) {
       kind: "monitor",
       message: repairJob?.status === "active"
         ? `${broken.label}已经故障，维修队正在抢修。`
-        : `${broken.label}已经故障，请检查维修队列。`,
+        : repairJob?.status === "queued"
+          ? `${broken.label}已经在队首，等待维修队开始抢修。`
+          : `${broken.label}已经故障，请检查维修队列。`,
     };
   }
 
   const queuedRepair = (state.maintenance?.queue ?? []).find((job) => job.kind === "repair");
   if (!queuedRepair) return null;
   const machine = machines.find((entry) => entry.id === queuedRepair.machineId);
+  const queueIndex = state.maintenance.queue.indexOf(queuedRepair);
+  if (queueIndex === 0) {
+    return {
+      kind: "monitor",
+      message: `${machine?.label ?? "故障设备"}已经在队首，等待维修队开始抢修。`,
+    };
+  }
   return {
     kind: "prioritizeRepair",
     machineId: queuedRepair.machineId,
@@ -93,7 +96,7 @@ function candidateRecommendation(state, design, level, machines) {
     .filter((machine) => machine.reliabilityStatus === "available")
     .filter((machine) => machine.band === "danger"
       || (machine.remainingCycles > 0 && machine.remainingCycles <= 1))
-    .slice(0, 3)
+    .slice(0, 1)
     .map((candidate) => forecastMaintenanceCandidate(candidate, state, design, level));
   const analysis = candidates[0];
   if (!analysis) return null;

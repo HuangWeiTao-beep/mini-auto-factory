@@ -55,6 +55,10 @@ export interface LevelConfig {
     slowdownThreshold: number;
     failureThreshold: number;
     wearPerCycle: Readonly<Partial<Record<ProcessingDeviceType, number>>>;
+    objective?: null | {
+      plannedCompletions: number;
+      queueReorders: number;
+    };
   };
   obstacles: readonly GridCell[];
   step: number;
@@ -138,6 +142,7 @@ export interface ProductionState {
     status: string;
     active: MaterialType | OrderMaterial | null;
     remaining: number;
+    totalDuration?: number;
     waiting: MaterialType | OrderMaterial | null;
     output: MaterialType | OrderMaterial | null;
     warning: string | null;
@@ -155,6 +160,8 @@ export interface ProductionState {
   maintenance?: {
     activeJob: null | { machineId: string; kind: "planned" | "repair"; remaining: number };
     queue: { machineId: string; kind: "planned" | "repair"; remaining: number }[];
+    plannedCompleted: number;
+    queueReorders: number;
   };
 }
 
@@ -177,6 +184,7 @@ export const LEVEL_CONFIG: LevelConfig;
 export function getLevelConfig(levelId: number): LevelConfig | undefined;
 export function isOrderSchedulingLevel(levelOrId: number | LevelConfig): boolean;
 export function isMaintenanceLevel(levelOrId: number | LevelConfig): boolean;
+export function getLatheOutputLabel(level: LevelConfig): "螺栓" | "未钻孔螺栓";
 export function getAllowedPaletteTypes(level: LevelConfig): LevelDeviceType[];
 export function getDeviceLimit(level: LevelConfig, type: LevelDeviceType): number;
 export function getTransportDuration(level: LevelConfig, from: GridCell, to: GridCell): number;

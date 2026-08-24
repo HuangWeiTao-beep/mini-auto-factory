@@ -12,6 +12,7 @@ import {
   getDeviceLimit,
   getAllowedPaletteTypes,
   getLevelConfig,
+  getLatheOutputLabel,
   isOrderSchedulingLevel,
   LEVELS,
   moveDevice,
@@ -21,6 +22,12 @@ import {
   removeConnection,
   startProduction,
 } from "../app/game/factory-model.mjs";
+
+test("lathe descriptions follow fixed-level drill output without mislabelling order recipes", () => {
+  assert.equal(getLatheOutputLabel(LEVELS[11]), "螺栓");
+  assert.equal(getLatheOutputLabel(LEVELS[12]), "未钻孔螺栓");
+  assert.equal(getLatheOutputLabel(LEVELS[13]), "螺栓");
+});
 
 function createDesign(types) {
   let design = createEmptyDesign();

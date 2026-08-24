@@ -8,6 +8,7 @@ const DEVICE_LABELS = Object.freeze({
   lathe: "车削机",
   drill: "钻孔机",
   coater: "镀层机",
+  heatTreater: "热处理炉",
   exit: "成品出口",
 });
 

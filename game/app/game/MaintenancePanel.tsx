@@ -34,6 +34,9 @@ export function MaintenancePanel({
   const activeJob = state.maintenance?.activeJob ?? null;
   const queue = state.maintenance?.queue ?? [];
   const hasOrderPanel = Boolean(level.orderConfig);
+  const objective = level.maintenance?.objective;
+  const plannedCompleted = state.maintenance?.plannedCompleted ?? 0;
+  const queueReorders = state.maintenance?.queueReorders ?? 0;
 
   return (
     <section className="maintenance-panel" aria-label="维修队列面板">
@@ -46,6 +49,16 @@ export function MaintenancePanel({
           <strong>{level.duration} 秒内完成 {level.target} 件合格品</strong>
           <p>{level.routeHint}</p>
           <small>观察磨损，在故障前安排计划维护；队首机器忙碌时可调整等待顺序。</small>
+        </section>
+      )}
+
+      {objective && (
+        <section className="maintenance-goal" data-testid="maintenance-objective" aria-label="维护验收目标">
+          <strong>维护验收</strong>
+          <p>计划维护 {Math.min(plannedCompleted, objective.plannedCompletions)}/{objective.plannedCompletions}</p>
+          {objective.queueReorders > 0 && (
+            <small>队列调整 {Math.min(queueReorders, objective.queueReorders)}/{objective.queueReorders}</small>
+          )}
         </section>
       )}
 

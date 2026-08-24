@@ -100,7 +100,9 @@ test("a missing route outranks a broken machine", () => {
 test("repair priority outranks a late queued order action", () => {
   const orders = [order("L13-01", 30), order("L13-02", 2)];
   const input = operationsState({ orders, queue: orders.map(({ id }) => id) });
+  input.state.machines.lathe.reliability.status = "maintenance-pending";
   input.state.machines.heat.reliability = { wear: 100, status: "broken" };
+  input.state.maintenance.queue.push({ machineId: "lathe", kind: "planned", remaining: 4 });
   input.state.maintenance.queue.push({ machineId: "heat", kind: "repair", remaining: 7 });
 
   assert.equal(feedback(input).recommendation.kind, "prioritizeRepair");

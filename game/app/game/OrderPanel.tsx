@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { OrderFailure, ProductId, ProductionOrder } from "./factory-model.mjs";
 import type { SchedulingFeedback, SchedulingOrderFeedback } from "./scheduling-feedback.mjs";
 
@@ -91,6 +92,7 @@ export function OrderPanel({
   onMoveDown,
   onPrioritize,
 }: Props) {
+  const [scheduledExpanded, setScheduledExpanded] = useState(false);
   const byId = new Map(orders.map((order) => [order.id, order]));
   const feedbackById = new Map(feedback?.orders.map((entry) => [entry.id, entry]));
   const riskRank = (order: ProductionOrder) => {
@@ -147,13 +149,28 @@ export function OrderPanel({
       )}
 
       <section className="order-section" aria-labelledby="order-scheduled-title">
-        <h2 id="order-scheduled-title">即将到达 <span>{scheduled.length}</span></h2>
-        <div className="order-stack">
-          {scheduled.length === 0 && <p className="order-empty">没有待到达订单</p>}
-          {scheduled.map((order) => (
-            <OrderSummary key={order.id} order={order} elapsed={elapsed} feedback={feedbackById.get(order.id)} testId={`order-scheduled-${order.id}`} className="order-card--scheduled" />
-          ))}
+        <div className="order-section__heading">
+          <h2 id="order-scheduled-title">即将到达 <span>{scheduled.length}</span></h2>
+          <button
+            type="button"
+            className="order-section__toggle"
+            data-testid="toggle-scheduled-orders"
+            aria-expanded={scheduledExpanded}
+            aria-controls="order-scheduled-list"
+            onClick={() => setScheduledExpanded((expanded) => !expanded)}
+          >
+            {scheduledExpanded ? "收起" : "展开"}
+            <span aria-hidden="true">{scheduledExpanded ? "−" : "+"}</span>
+          </button>
         </div>
+        {scheduledExpanded && (
+          <div id="order-scheduled-list" className="order-stack">
+            {scheduled.length === 0 && <p className="order-empty">没有待到达订单</p>}
+            {scheduled.map((order) => (
+              <OrderSummary key={order.id} order={order} elapsed={elapsed} feedback={feedbackById.get(order.id)} testId={`order-scheduled-${order.id}`} className="order-card--scheduled" />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="order-section" aria-labelledby="order-waiting-title">

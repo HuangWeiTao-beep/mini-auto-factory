@@ -154,6 +154,12 @@ button { font: inherit; }
 .order-section { margin-top: 14px; }
 .order-section h2 { display: flex; justify-content: space-between; align-items: center; margin: 0 0 7px; font-size: 11px; letter-spacing: .08em; }
 .order-section h2 span { min-width: 25px; padding: 3px 5px; color: white; text-align: center; background: var(--steel); font: 800 8px var(--font-geist-mono); }
+.order-section__heading { display: flex; gap: 8px; align-items: center; margin-bottom: 7px; }
+.order-section__heading h2 { flex: 1; margin-bottom: 0; }
+.order-section__toggle { display: inline-flex; gap: 5px; align-items: center; min-height: 26px; padding: 4px 7px; color: #39413f; border: 1px solid #8f9793; background: rgba(255,255,255,.42); cursor: pointer; font: 800 8px var(--font-geist-mono); }
+.order-section__toggle:hover { border-color: var(--orange); color: var(--orange-dark); background: #fff2df; }
+.order-section__toggle:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+.order-section__toggle span { color: inherit; font-size: 11px; line-height: 1; }
 .order-stack { display: grid; gap: 7px; }
 .order-queue { margin: 0; padding: 0; list-style: none; }
 .order-empty { margin: 0; padding: 10px; color: #737b78; border: 1px dashed rgba(0,0,0,.2); background: rgba(255,255,255,.24); font-size: 9px; text-align: center; }

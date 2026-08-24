@@ -10,6 +10,24 @@ import {
   seedChapterTwoLevel,
 } from "./helpers";
 
+test("scheduled orders can be expanded and collapsed without occupying the panel by default", async ({ page }) => {
+  await seedChapterTwoLevel(page, { activeLevelId: 6 });
+  await page.goto("/");
+  await dismissChapterTwoOnboarding(page);
+
+  const toggle = page.getByTestId("toggle-scheduled-orders");
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("order-scheduled-L6-01")).toHaveCount(0);
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByTestId("order-scheduled-L6-01")).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByTestId("order-scheduled-L6-01")).toHaveCount(0);
+});
+
 test("level six schedules fixed orders, keeps the line locked, and unlocks level seven", async ({ page }) => {
   await seedChapterTwoLevel(page, { activeLevelId: 6 });
   await installDeterministicClock(page);

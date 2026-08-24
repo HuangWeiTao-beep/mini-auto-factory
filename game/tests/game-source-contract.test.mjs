@@ -237,6 +237,20 @@ test("chapter two exposes a pure order panel with stable accessible queue contro
   assert.match(game, /actionsEnabled=\{state\.mode === "running"\}/);
 });
 
+test("scheduled orders start collapsed behind an accessible toggle", async () => {
+  const orderPanel = await readFile(
+    new URL("../app/game/OrderPanel.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(orderPanel, /useState\(false\)/);
+  assert.match(orderPanel, /aria-expanded=\{scheduledExpanded\}/);
+  assert.match(orderPanel, /aria-controls="order-scheduled-list"/);
+  assert.match(orderPanel, /scheduledExpanded\s*&&\s*\(/);
+  assert.match(orderPanel, /id="order-scheduled-list"/);
+  assert.match(orderPanel, /scheduledExpanded \? "收起" : "展开"/);
+});
+
 test("chapter two uses scenario palette order and chapter-aware level copy", async () => {
   const [game, machine, levelSelect] = await Promise.all([
     readFile(new URL("../app/game/MiniFactoryGame.tsx", import.meta.url), "utf8"),

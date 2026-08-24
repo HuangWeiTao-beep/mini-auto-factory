@@ -6,6 +6,7 @@ const placementPoints = {
   lathe: { x: 510, y: 150 },
   drill: { x: 640, y: 150 },
   coater: { x: 640, y: 330 },
+  heatTreater: { x: 460, y: 330 },
   exit: { x: 730, y: 150 },
 } as const;
 
@@ -15,6 +16,7 @@ const machineLabels = {
   lathe: "车削机",
   drill: "钻孔机",
   coater: "镀层机",
+  heatTreater: "热处理炉",
   exit: "成品出口",
 } as const;
 
@@ -22,6 +24,7 @@ const productRoutes = {
   standard: ["source", "cutter", "lathe", "exit"],
   precision: ["source", "cutter", "lathe", "drill", "exit"],
   rustproof: ["source", "cutter", "lathe", "coater", "exit"],
+  hardened: ["source", "cutter", "lathe", "heatTreater", "exit"],
 } as const;
 
 export const FIXED_CHAPTER_TWO_SEEDS = {
@@ -32,6 +35,12 @@ export const FIXED_CHAPTER_TWO_SEEDS = {
   10: 2010,
 } as const;
 
+export const FIXED_CHAPTER_THREE_SEEDS = {
+  13: 2313,
+  14: 2414,
+  15: 2515,
+} as const;
+
 type MachineType = keyof typeof machineLabels;
 type ProductType = keyof typeof productRoutes;
 
@@ -40,6 +49,11 @@ type PlacementPoint = { x: number; y: number };
 type ChapterTwoSaveOptions = {
   activeLevelId: 6 | 7 | 8 | 9 | 10;
   unlockedLevel?: 6 | 7 | 8 | 9 | 10;
+};
+
+type ChapterThreeSaveOptions = {
+  activeLevelId: 10 | 11 | 12 | 13 | 14 | 15;
+  unlockedLevel?: 11 | 12 | 13 | 14 | 15;
 };
 
 export async function dismissOnboarding(page: Page) {
@@ -57,8 +71,10 @@ export async function placeLevelOneMachines(page: Page) {
 
 export async function placeMachine(page: Page, type: MachineType, targetPosition: PlacementPoint) {
   const floor = page.locator(".factory-floor");
+  const machines = floor.locator(`.machine--${type}`);
+  const currentCount = await machines.count();
   await page.locator(".palette-card", { hasText: machineLabels[type] }).dragTo(floor, { targetPosition });
-  await expect(floor.locator(`.machine--${type}`)).toHaveCount(1);
+  await expect(machines).toHaveCount(currentCount + 1);
 }
 
 export async function placeMachines(
@@ -126,6 +142,32 @@ export async function seedChapterTwoLevel(page: Page, options: ChapterTwoSaveOpt
     unlockedLevel,
     marker,
     chapterTwoSeeds: FIXED_CHAPTER_TWO_SEEDS,
+  });
+}
+
+export async function seedChapterThreeLevel(page: Page, options: ChapterThreeSaveOptions) {
+  const unlockedLevel = options.unlockedLevel ?? options.activeLevelId;
+  const marker = `e2e-chapter-three-save-v3-${options.activeLevelId}-${unlockedLevel}`;
+
+  await page.addInitScript(({ activeLevelId, unlockedLevel, marker, orderScenarioSeeds }) => {
+    if (sessionStorage.getItem(marker)) return;
+    localStorage.setItem("mini-factory-save", JSON.stringify({
+      version: 3,
+      unlockedLevel,
+      activeLevelId,
+      bestResults: {},
+      drafts: {},
+      orderScenarioSeeds,
+    }));
+    sessionStorage.setItem(marker, "true");
+  }, {
+    activeLevelId: options.activeLevelId,
+    unlockedLevel,
+    marker,
+    orderScenarioSeeds: {
+      ...FIXED_CHAPTER_TWO_SEEDS,
+      ...FIXED_CHAPTER_THREE_SEEDS,
+    },
   });
 }
 

@@ -63,8 +63,8 @@ test("level six schedules fixed orders, keeps the line locked, and unlocks level
   await expect(successDialog).toContainText("全部订单按时完成");
   await expect.poll(() => page.evaluate(() => {
     const save = JSON.parse(localStorage.getItem("mini-factory-save") ?? "{}");
-    return [save.unlockedLevel, save.chapterTwoSeeds?.[6]];
-  })).toEqual([7, 1606]);
+    return [save.version, save.unlockedLevel, save.orderScenarioSeeds?.[6]];
+  })).toEqual([3, 7, 1606]);
   await page.getByRole("button", { name: "下一关" }).click();
   await expect(page.getByRole("heading", { name: "第 7 关：双线调度" })).toBeVisible();
 });
